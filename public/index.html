@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>IQ Funnel — Test Harness</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <link rel="stylesheet" href="/app/style.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">IQ Funnel <span class="tag">test harness</span></div>
+      <div class="quiz-id" id="quizIdBadge" hidden>
+        quiz_id: <code id="quizIdValue"></code>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="panel">
+        <ol class="steps" id="steps">
+          <li data-step="quiz" class="active">1. Quiz</li>
+          <li data-step="checkout">2. Checkout</li>
+          <li data-step="crosssell">3. Cross-sell</li>
+          <li data-step="details">4. Details</li>
+          <li data-step="result">5. Result</li>
+        </ol>
+
+        <!-- Setup -->
+        <div class="card" id="setupCard">
+          <h2>Setup</h2>
+          <div id="setupStatus" class="status"></div>
+          <label>
+            API base URL
+            <input id="apiBase" type="text" />
+          </label>
+          <label>
+            x-api-key <small>(blank if API_KEY is unset on the server)</small>
+            <input id="apiKey" type="text" placeholder="test_key" />
+          </label>
+          <label>
+            Customer email
+            <input id="email" type="email" placeholder="harness@example.com" />
+          </label>
+          <label>
+            Language
+            <select id="language">
+              <option value="ja">ja — JPY ¥2,980 / ¥1,480</option>
+              <option value="en">en — USD $19.99 / $9.99</option>
+            </select>
+          </label>
+          <label>
+            Discount code <small>(price_dis)</small>
+            <input id="discount" type="text" placeholder="blank for none — codes live in data/discount-codes.json" />
+          </label>
+          <label class="check">
+            <input id="discountPersonalise" type="checkbox" />
+            <span>Personalise — prefix with the first two letters of the email (<code>xx_CODE</code>)</span>
+          </label>
+          <div class="row">
+            <button id="btnCheckPrice" class="ghost small">Check /price</button>
+          </div>
+          <div id="pricePreview" class="price-preview" hidden></div>
+          <p class="hint">
+            Settings persist in this browser. Reusing the same email reuses the same customer
+            (one Stripe customer, a new quiz attempt each run). Test card
+            <code>4242 4242 4242 4242</code>, any future expiry / CVC.
+            3D Secure: <code>4000 0025 0000 3155</code>.
+          </p>
+        </div>
+
+        <!-- Step 1: quiz -->
+        <div class="card screen" data-screen="quiz">
+          <h2>1. Complete the test</h2>
+          <p>Submits a fixed payload to <code>POST /questions/submit</code>.</p>
+          <pre id="quizPayload"></pre>
+          <button id="btnCompleteTest" class="primary">Complete test</button>
+        </div>
+
+        <!-- Step 2: checkout -->
+        <div class="card screen" data-screen="checkout" hidden>
+          <h2>2. Checkout — first sale</h2>
+          <p class="price" id="firstSalePrice">—</p>
+          <p id="firstSaleDiscount" class="discount-line" hidden></p>
+          <div id="firstSaleElement" class="stripe-element"></div>
+          <div id="firstSaleError" class="error" hidden></div>
+          <button id="btnPayFirstSale" class="primary" disabled>Pay now</button>
+        </div>
+
+        <!-- Step 3: cross-sell -->
+        <div class="card screen" data-screen="crosssell" hidden>
+          <h2>3. Cross-sell — career report</h2>
+          <p class="price" id="crossSalePrice">—</p>
+          <p>
+            One click — no card entry. This charges the card saved during the first sale via
+            <code>POST /payment/cross-sale/confirm</code>.
+          </p>
+          <div id="crossSaleError" class="error" hidden></div>
+          <div class="row">
+            <button id="btnPayCrossSale" class="primary">Add to my order</button>
+            <button id="btnSkipCrossSale" class="ghost">Skip</button>
+          </div>
+        </div>
+
+        <!-- Step 4: details -->
+        <div class="card screen" data-screen="details" hidden>
+          <h2>4. Your details</h2>
+          <p>Sends <code>PUT /customer/update</code>.</p>
+          <label>First name <input id="firstName" type="text" value="太郎" /></label>
+          <label>Last name <input id="lastName" type="text" value="山田" /></label>
+          <label>Age <input id="age" type="text" value="30" /></label>
+          <button id="btnSaveDetails" class="primary">Save and continue</button>
+        </div>
+
+        <!-- Step 5: result -->
+        <div class="card screen" data-screen="result" hidden>
+          <h2>5. Result</h2>
+          <div id="resultBody"></div>
+          <button id="btnRestart" class="ghost">Start over</button>
+        </div>
+      </section>
+
+      <aside class="panel log-panel">
+        <div class="log-head">
+          <h2>API calls</h2>
+          <button id="btnClearLog" class="ghost small">Clear</button>
+        </div>
+        <div id="log" class="log"></div>
+      </aside>
+    </main>
+
+    <script src="/app/config.js"></script>
+    <script src="/app/app.js"></script>
+  </body>
+</html>
