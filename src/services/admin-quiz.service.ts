@@ -1,4 +1,5 @@
 import { In } from 'typeorm';
+import { EncryptionUtil } from '../utils/encryption.util.js';
 import { AppDataSource } from '../config/database.config.js';
 import { CustomerQuizResult } from '../entities/CustomerQuizResult.entity.js';
 import { CustomerQuizResultPaymentTransaction } from '../entities/CustomerQuizResultPaymentTransaction.entity.js';
@@ -52,11 +53,20 @@ export class AdminQuizService {
     if (search) {
       const term = search.trim();
       if (term) {
+        // An operator can paste three different things into this box: the raw
+        // database id, the encrypted token from a result URL or an email, or an
+        // address. The token is the one they are most likely to have — it is
+        // what appears in the links customers send to support — so it is
+        // resolved to its id here rather than being treated as a failed email
+        // search.
+        const fromToken = /^\d+$/.test(term) ? null : EncryptionUtil.tryDecryptId(term);
+        const id = /^\d+$/.test(term) ? term : fromToken;
+
         // quiz.id is a bigint; comparing it to a non-numeric string would make
-        // Postgres throw, so the id branch is only added for numeric input.
-        if (/^\d+$/.test(term)) {
+        // Postgres throw, so the id branch is only added when there is one.
+        if (id) {
           qb.andWhere('(quiz.id = :exactId OR quiz.email ILIKE :emailTerm)', {
-            exactId: term,
+            exactId: id,
             emailTerm: `%${term}%`
           });
         } else {

@@ -458,6 +458,10 @@ export class PaymentService {
         default_payment_method: paymentMethodId,
         off_session: true,
         payment_behavior: 'allow_incomplete',
+        // The free trial. Nothing is charged until it ends, and Stripe reports
+        // the subscription as `trialing` throughout — which already grants
+        // access, and is what the welcome email's trial panel keys off.
+        ...(plan.trial_days > 0 ? { trial_period_days: plan.trial_days } : {}),
         metadata: {
           quiz_result_id: String(quizResult.id),
           customer_email: quizResult.email,
@@ -516,20 +520,34 @@ export class PaymentService {
         stripe_subscription_id: subscription.id,
         stripe_customer_id: stripeCustomerId,
         status: subscription.status,
-        plan_name: item?.price?.nickname || 'IQ Training Monthly',
+        plan_name: item?.price?.nickname || 'IQ Brain Training',
         amount: amount.toString(),
         currency: (item?.price?.currency || 'jpy').toUpperCase(),
+        cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
         current_period_start: periodStart ? new Date(periodStart * 1000) : null,
         current_period_end: periodEnd ? new Date(periodEnd * 1000) : null
       });
     } else {
       record.status = subscription.status;
+      // A membership cancelled from the members' area, or from Stripe's billing
+      // portal, stays `active` until its period runs out — this flag is the only
+      // thing that distinguishes "cancelling on the 18th" from "renewing on the
+      // 18th", so it has to ride along with the status it qualifies.
+      record.cancel_at_period_end = Boolean(subscription.cancel_at_period_end);
       if (periodStart) record.current_period_start = new Date(periodStart * 1000);
       if (periodEnd) record.current_period_end = new Date(periodEnd * 1000);
       // Backfill the quiz link for rows written before the reference existed
       if (!record.customer_quiz_result_id && quizResultId) {
         record.customer_quiz_result_id = quizResultId;
       }
+      // The cached card is dropped rather than refreshed here: changing a card
+      // in Stripe's billing portal produces this event, and re-reading it now
+      // would put a Stripe call on the webhook's critical path. The members'
+      // area refills it on the next read, which is the request that needs it.
+      record.card_brand = null;
+      record.card_last4 = null;
+      record.card_exp_month = null;
+      record.card_exp_year = null;
     }
 
     await this.subscriptionRepository.save(record);

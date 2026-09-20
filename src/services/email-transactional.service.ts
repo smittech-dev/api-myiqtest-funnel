@@ -2,17 +2,20 @@ import { AppDataSource } from '../config/database.config.js';
 import { config } from '../config/env.config.js';
 import { Customer } from '../entities/Customer.entity.js';
 import { CustomerQuizResult } from '../entities/CustomerQuizResult.entity.js';
+import { CustomerSubscription } from '../entities/CustomerSubscription.entity.js';
 import { EmailTransactionalLog } from '../entities/EmailTransactionalLog.entity.js';
 import { createEmailContext, honorific } from '../emails/context.js';
 import type { EmailLanguage, EmailTemplateContext } from '../emails/email.types.js';
 import { emailService } from './email.service.js';
+import { formatMoney } from './boost-subscription.service.js';
+import { SUBSCRIPTION_INTERVAL_DAYS } from '../constants/pricing.constants.js';
 import { generateCustomerPassword } from '../utils/customer-password.util.js';
 import { EncryptionUtil } from '../utils/encryption.util.js';
 import { logger } from '../utils/logger.util.js';
 import { PasswordUtil } from '../utils/password.util.js';
 
 /**
- * The two emails a paying customer receives.
+ * The transactional emails a paying customer receives.
  *
  * Both are **fire-and-forget from the caller's point of view**. A payment must
  * not fail because ZeptoMail was slow, and a Stripe webhook must not time out
@@ -86,6 +89,8 @@ export class EmailTransactionalService {
         );
       }
 
+      const billing = await this.subscriptionFor(customer.id, language);
+
       return {
         templateId: 'transactional_welcome',
         customerId: customer.id,
@@ -95,7 +100,8 @@ export class EmailTransactionalService {
           login_email: customer.email,
           login_password: password,
           login_url: loginUrl,
-          program_name: config.brainTraining.name
+          program_name: config.brainTraining.name,
+          ...billing
         })
       };
     });
@@ -142,7 +148,9 @@ export class EmailTransactionalService {
           // second button from the design.
           cross_sale_report_url: paid('cross_sale')
             ? this.reportUrl(quizResult, 'cross_sale')
-            : null
+            : null,
+          // The receipt, taken from what actually settled.
+          ...this.amountsFor(quizResult)
         })
       };
     });
@@ -392,10 +400,117 @@ export class EmailTransactionalService {
         first_name: quizResult.first_name,
         honorific_name: honorific(language, quizResult.first_name),
         iq_score: quizResult.iq_score,
+        iq_band: bandFor(language, quizResult.iq_score),
+        quiz_id: quizResult.id,
+        order_ref: orderRef(quizResult),
+        order_date: formatDate(language, quizResult.created_at),
         ...overrides
       }
     );
   }
+
+  /**
+   * What the customer actually paid, in the currency they paid in.
+   *
+   * Read from the settled transactions rather than from the price list: a
+   * discount code, a currency change or a price rise since would all make the
+   * catalogue figure wrong, and a receipt that disagrees with the customer's
+   * bank statement is worse than no receipt.
+   */
+  private amountsFor(quizResult: CustomerQuizResult): {
+    first_sale_amount: string | null;
+    cross_sale_amount: string | null;
+  } {
+    const settled = (type: string) =>
+      quizResult.transactions?.find((tx) => tx.transaction_type === type && tx.status === 'succeeded') ??
+      null;
+
+    const first = settled('first_sale');
+    const cross = settled('cross_sale');
+
+    return {
+      first_sale_amount: first ? formatMoney(first.amount, first.currency) : null,
+      cross_sale_amount: cross ? formatMoney(cross.amount, cross.currency) : null
+    };
+  }
+
+  /**
+   * The recurring charge and, if one exists, when the trial ends.
+   *
+   * `trial_end` stays null unless Stripe actually put the subscription in a
+   * trial. The welcome design has a "your free trial is active" block that this
+   * gates: announcing a trial the customer does not have would be telling them
+   * they will not be charged when they will be.
+   */
+  private async subscriptionFor(
+    customerId: string | null,
+    language: EmailLanguage
+  ): Promise<{
+    subscription_price: string | null;
+    interval_days: number | null;
+    trial_end: string | null;
+  }> {
+    if (!customerId) return { subscription_price: null, interval_days: null, trial_end: null };
+
+    const subscription = await AppDataSource.getRepository(CustomerSubscription).findOne({
+      where: { customer_id: customerId },
+      order: { created_at: 'DESC' }
+    });
+
+    if (!subscription) return { subscription_price: null, interval_days: null, trial_end: null };
+
+    return {
+      subscription_price: formatMoney(subscription.amount, subscription.currency),
+      interval_days: SUBSCRIPTION_INTERVAL_DAYS,
+      trial_end:
+        subscription.status === 'trialing' && subscription.current_period_end
+          ? formatDate(language, subscription.current_period_end)
+          : null
+    };
+  }
+}
+
+/* ── formatting helpers ───────────────────────────────────────────────────── */
+
+/** A human order number. Stable, and derived rather than stored. */
+const orderRef = (quizResult: CustomerQuizResult): string => `myIQ_${quizResult.id}`;
+
+/** A date the customer can match against a statement, in their own language. */
+function formatDate(language: EmailLanguage, date: Date): string {
+  try {
+    return new Intl.DateTimeFormat(language === 'ja' ? 'ja-JP' : 'en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }).format(date);
+  } catch {
+    return date.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * A plain-language band for a score.
+ *
+ * Deliberately vague at the edges. These are standard Wechsler-style
+ * descriptors and the test is a consumer product, so the wording stays
+ * descriptive rather than clinical — nobody is told they are "deficient".
+ */
+function bandFor(language: EmailLanguage, score: number | null): string | null {
+  if (score === null || score === undefined) return null;
+
+  const bands: [number, string, string][] = [
+    [130, '非常に高い', 'Very high'],
+    [120, '高い', 'Superior'],
+    [110, '平均より上', 'Above average'],
+    [90, '平均的', 'Average'],
+    [80, '平均よりやや下', 'Low average'],
+    [0, '平均より下', 'Below average']
+  ];
+
+  const match = bands.find(([floor]) => score >= floor);
+  if (!match) return null;
+
+  return language === 'ja' ? match[1] : match[2];
 }
 
 export const emailTransactionalService = new EmailTransactionalService();

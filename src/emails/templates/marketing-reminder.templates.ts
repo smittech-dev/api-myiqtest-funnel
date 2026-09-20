@@ -22,6 +22,15 @@ import {
 
 interface Copy {
   subject: string;
+  /**
+   * The line shown beside the subject in the inbox list.
+   *
+   * Worth writing rather than leaving to the client: unset, every client pulls
+   * the opening words of the body instead, which on all four of these is a
+   * thank-you rather than a reason to open. It is the second thing a reader
+   * sees and the cheapest thing in the email to get right.
+   */
+  preview: string;
   eyebrow: string;
   headline: string;
   /** Body paragraphs, in order. */
@@ -46,6 +55,7 @@ const DEFINITIONS: ReminderDefinition[] = [
     copy: {
       ja: {
         subject: '{{honorific_name}}の詳細IQレポートが未受け取りです',
+        preview: '採点は完了しています。4分野の詳細分析と、{{discount_percent}}%OFFクーポンのご案内です。',
         eyebrow: 'レポート準備完了',
         headline: 'あなたの詳細IQレポートをお待ちしています',
         paragraphs: [
@@ -58,6 +68,7 @@ const DEFINITIONS: ReminderDefinition[] = [
       },
       en: {
         subject: 'Hi {{honorific_name}}, your detailed IQ report is still waiting',
+        preview: 'Your answers are scored. Inside: all four categories, your age-group comparison, and {{discount_percent}}% off.',
         eyebrow: 'Report ready',
         headline: 'Your detailed IQ report is ready to unlock',
         paragraphs: [
@@ -78,6 +89,7 @@ const DEFINITIONS: ReminderDefinition[] = [
     copy: {
       ja: {
         subject: 'そのIQスコアが何を意味するのか、まだご覧になっていません',
+        preview: 'スコアそのものより、その内訳のほうが役に立ちます。{{discount_percent}}%OFFは間もなく終了します。',
         eyebrow: 'あと少しで完了',
         headline: 'スコアの「意味」まで、まだ見ていませんね',
         paragraphs: [
@@ -90,6 +102,7 @@ const DEFINITIONS: ReminderDefinition[] = [
       },
       en: {
         subject: 'What your IQ score actually means',
+        preview: 'The number is the least interesting part. The breakdown is where it gets useful — and {{discount_percent}}% off is still on.',
         eyebrow: 'Almost there',
         headline: 'You have the number. You have not seen what it means.',
         paragraphs: [
@@ -110,6 +123,7 @@ const DEFINITIONS: ReminderDefinition[] = [
     copy: {
       ja: {
         subject: '【半額】{{honorific_name}}へ — 詳細IQレポートが{{discount_percent}}%OFF',
+        preview: 'これまでで最大の割引です。ご利用は期間限定となります。',
         eyebrow: '特別割引',
         headline: '割引率を引き上げました — 今なら{{discount_percent}}%OFF',
         paragraphs: [
@@ -122,6 +136,7 @@ const DEFINITIONS: ReminderDefinition[] = [
       },
       en: {
         subject: 'Your biggest discount yet: {{discount_percent}}% off your IQ report',
+        preview: 'The largest discount we offer on the full report. It does not get better than this one.',
         eyebrow: 'Best offer',
         headline: 'We have doubled your discount — {{discount_percent}}% off',
         paragraphs: [
@@ -142,6 +157,7 @@ const DEFINITIONS: ReminderDefinition[] = [
     copy: {
       ja: {
         subject: '最終案内: IQレポートが{{discount_percent}}%OFF（本日まで）',
+        preview: 'このクーポンは本日で終了します。レポートはその後もお受け取りいただけますが、定価となります。',
         eyebrow: '最終のご案内',
         headline: 'IQレポートに関するご連絡は、これが最後です',
         paragraphs: [
@@ -154,6 +170,7 @@ const DEFINITIONS: ReminderDefinition[] = [
       },
       en: {
         subject: 'Final reminder: your IQ report ({{discount_percent}}% off)',
+        preview: 'Last day for this coupon. The report stays available afterwards, just at full price.',
         eyebrow: 'Last call',
         headline: 'This is the last email about your IQ report',
         paragraphs: [
@@ -221,6 +238,7 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
 
       return renderLayout({
         language: ctx.language,
+        previewText: asText(text.preview),
         eyebrow: asText(text.eyebrow),
         headline: asText(text.headline),
         body,

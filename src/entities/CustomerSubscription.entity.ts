@@ -59,8 +59,40 @@ export class CustomerSubscription {
   @Column({ type: 'timestamptz', nullable: true })
   current_period_end!: Date | null;
 
+  /**
+   * The card, as the subscription screen shows it. Stripe is the source of
+   * truth; these four are a cache filled from the payment webhook so rendering
+   * that screen does not need a round trip to the payment provider on every
+   * page load.
+   */
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  card_brand!: string | null;
+
+  @Column({ type: 'char', length: 4, nullable: true })
+  card_last4!: string | null;
+
+  @Column({ type: 'smallint', nullable: true })
+  card_exp_month!: number | null;
+
+  @Column({ type: 'smallint', nullable: true })
+  card_exp_year!: number | null;
+
   @Column({ type: 'timestamptz', nullable: true })
   canceled_at!: Date | null;
+
+  /**
+   * Mirrors Stripe's `cancel_at_period_end`.
+   *
+   * Cancelling stops the renewal without taking away time already paid for, so
+   * a cancelled subscription stays `active` until the period ends. Without this
+   * column nothing can tell "cancelling on the 18th" from "renewing on the
+   * 18th" — `status` is identical in both cases and `canceled_at` is still null.
+   *
+   * Maintained by the same webhook that maintains `status`, so it is Stripe's
+   * answer rather than our guess at it.
+   */
+  @Column({ type: 'boolean', default: false })
+  cancel_at_period_end!: boolean;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   cancel_reason!: string | null;

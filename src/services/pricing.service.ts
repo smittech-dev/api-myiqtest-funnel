@@ -39,7 +39,11 @@ export class PricingService {
         stripe_amount: subscription.currency === 'JPY'
           ? subscription.amount
           : Math.round(subscription.amount * 100),
-        price_id: subscription.price_id
+        price_id: subscription.price_id,
+        // The checkout has to be able to state the real terms: a free trial of
+        // this many days, then this amount every this many days.
+        interval_days: subscription.interval_days,
+        trial_days: subscription.trial_days
       }
     };
   }

@@ -3,24 +3,65 @@ import type { EmailLanguage, EmailTemplateContext } from './email.types.js';
 /**
  * The shared shell every design renders inside.
  *
- * Email HTML is not web HTML: Outlook still lays tables out with Word, Gmail
- * strips <style> blocks in some contexts, and no two clients agree on flexbox.
- * So this is table-based, 600px wide, with every style inlined — deliberately
- * old-fashioned, because that is what renders the same in twenty clients.
+ * Built to the reference designs in `docs/email-template-ref/`: a 600px card on
+ * a pale blue canvas, navy masthead rule, coral eyebrows, and panels in cream
+ * and pale blue.
+ *
+ * Email HTML is not web HTML. Outlook lays tables out with Word, Gmail strips
+ * the `<style>` block in its clipped view, and no client agrees on flexbox. So
+ * this is table-based with every style inlined — deliberately old-fashioned,
+ * because that is what renders the same in twenty clients. The `<style>` block
+ * carries responsive rules only, as progressive enhancement; nothing in it is
+ * load-bearing.
  */
 
-const BRAND = '#4f46e5';
-const INK = '#111827';
-const MUTED = '#6b7280';
-const BORDER = '#e5e7eb';
-const CANVAS = '#f4f4f7';
+/* ── design tokens, from the reference ────────────────────────────────────── */
 
-const FONT_STACK: Record<EmailLanguage, string> = {
-  // Japanese needs its own stack: a Latin-first list falls back to a font with
-  // no kana, and the whole message renders in the client's default serif.
-  ja: "'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic',Meiryo,'MS PGothic',sans-serif",
-  en: "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+const CANVAS = '#f2f5f9';
+const CARD = '#ffffff';
+const NAVY = '#12294a';
+const INK = '#101826';
+const MUTED = '#5a6779';
+const FAINT = '#7d8797';
+const PALE = '#a8b0bd';
+const CORAL = '#d94f3d';
+const CORAL_BTN = '#e8654f';
+const LINK = '#b93c2a';
+const CREAM = '#f8f6f2';
+const PALE_BLUE = '#f1f5fa';
+const HAIRLINE = 'rgba(18,41,74,0.12)';
+
+/**
+ * Two stacks per language, because the reference sets headings in Sora and body
+ * copy in a plain grotesque, and mixing them is most of the look.
+ *
+ * Japanese needs its own list: a Latin-first stack falls back to a font with no
+ * kana, and the whole message renders in the client's default serif. Sora has
+ * no Japanese glyphs at all, so the JA display stack names the Gothic faces
+ * first and lets weight carry the emphasis instead.
+ */
+const JA_STACK =
+  "'Hiragino Kaku Gothic ProN','Hiragino Sans','Yu Gothic',Meiryo,'MS PGothic',sans-serif";
+
+const DISPLAY: Record<EmailLanguage, string> = {
+  en: "'Sora','Helvetica Neue',Helvetica,Arial,sans-serif",
+  ja: JA_STACK
 };
+
+const BODY: Record<EmailLanguage, string> = {
+  en: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+  ja: JA_STACK
+};
+
+const MONO = "ui-monospace,'SFMono-Regular','Courier New',monospace";
+
+/** The masthead logo, per language. */
+const LOGO: Record<EmailLanguage, { src: string; width: number; height: number; alt: string }> = {
+  en: { src: 'https://myiq-test.com/logo-en-navy.png', width: 180, height: 33, alt: 'myIQ Test' },
+  ja: { src: 'https://myiq-test.com/logo-jp-navy.png', width: 180, height: 35, alt: 'myIQ Test' }
+};
+
+/* ── escaping ─────────────────────────────────────────────────────────────── */
 
 /** Escapes text that came from a customer before it lands in HTML. */
 export function escapeHtml(value: string | number | null | undefined): string {
@@ -68,40 +109,457 @@ export function escapeContext(ctx: EmailTemplateContext): Record<string, string>
   return escaped;
 }
 
+/* ── building blocks ──────────────────────────────────────────────────────── */
+
 /** One button in the action block. */
 export interface EmailAction {
   label: string;
   url: string;
   /**
-   * Filled in brand colour rather than outlined. Exactly one action should be
-   * primary — two equally weighted buttons ask the reader to make a decision
-   * the email has not given them the information to make.
+   * Filled in coral rather than navy. Exactly one action should be primary —
+   * two equally weighted buttons ask the reader to make a decision the email
+   * has not given them the information to make.
    */
   primary?: boolean;
 }
 
-interface LayoutOptions {
-  language: EmailLanguage;
-  /** Small line above the headline — usually the urgency cue. */
-  eyebrow?: string;
-  headline: string;
-  /** Pre-rendered HTML for the message body. */
+/** A pill button. Bulletproof enough for Outlook without VML. */
+export function button(
+  language: EmailLanguage,
+  label: string,
+  url: string,
+  opts: { tone?: 'coral' | 'navy' | 'coralDeep'; align?: 'center' | 'left'; size?: 'lg' | 'sm' } = {}
+): string {
+  const { tone = 'coral', align = 'center', size = 'lg' } = opts;
+  const bg = tone === 'navy' ? NAVY : tone === 'coralDeep' ? CORAL : CORAL_BTN;
+  const padding = size === 'lg' ? '14px 32px' : '13px 28px';
+  const fontSize = size === 'lg' ? '15px' : '14px';
+
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" class="btn"' +
+      (align === 'center' ? ' align="center" style="margin:0 auto;"' : '') +
+      '>',
+    '<tr>',
+    '<td align="center" bgcolor="' + bg + '" style="border-radius:999px;">',
+    '<a href="' +
+      escapeHtml(url) +
+      '" target="_blank" style="display:inline-block; padding:' +
+      padding +
+      "; font-family:" +
+      DISPLAY[language] +
+      '; font-size:' +
+      fontSize +
+      '; line-height:18px; font-weight:bold; color:#ffffff; text-decoration:none; border-radius:999px;">' +
+      escapeHtml(label) +
+      '</a>',
+    '</td>',
+    '</tr>',
+    '</table>'
+  ].join('');
+}
+
+/**
+ * The navy call-to-action card: a line of promise, then the button.
+ *
+ * The one block in the design that inverts, which is what makes it the thing
+ * the eye lands on after the headline.
+ */
+export function ctaCard(
+  language: EmailLanguage,
+  opts: { title: string; label: string; url: string; note?: string; tone?: 'coral' | 'coralDeep' }
+): string {
+  const noteRow = opts.note
+    ? '<p style="margin:16px 0 0 0; font-family:' +
+      BODY[language] +
+      '; font-size:12px; line-height:19px; color:rgba(255,255,255,0.55);">' +
+      escapeHtml(opts.note) +
+      '</p>'
+    : '';
+
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+      NAVY +
+      '; border-radius:14px;">',
+    '<tr><td align="center" style="padding:30px 24px;">',
+    '<p style="margin:0 0 20px 0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:22px; line-height:30px; font-weight:bold; color:#ffffff;">' +
+      escapeHtml(opts.title) +
+      '</p>',
+    button(language, opts.label, opts.url, { tone: opts.tone ?? 'coral' }),
+    noteRow,
+    '</td></tr>',
+    '</table>'
+  ].join('');
+}
+
+/** The big score on navy — the report email's centrepiece. */
+export function scoreCard(
+  language: EmailLanguage,
+  opts: { label: string; score: number; band?: string | null }
+): string {
+  const bandRow = opts.band
+    ? '<p style="margin:0; font-family:' +
+      BODY[language] +
+      '; font-size:13px; line-height:20px; color:' +
+      CORAL_BTN +
+      ';">' +
+      escapeHtml(opts.band) +
+      '</p>'
+    : '';
+
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+      NAVY +
+      '; border-radius:14px;">',
+    '<tr><td align="center" style="padding:30px 24px 26px 24px;">',
+    '<p style="margin:0 0 6px 0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:10px; line-height:16px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.6);">' +
+      escapeHtml(opts.label) +
+      '</p>',
+    '<p class="score-num" style="margin:0 0 4px 0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:68px; line-height:72px; font-weight:bold; letter-spacing:-2px; color:#ffffff;">' +
+      escapeHtml(opts.score) +
+      '</p>',
+    bandRow,
+    '</td></tr>',
+    '</table>'
+  ].join('');
+}
+
+/** A soft panel. `cream` for information, `blue` for anything actionable. */
+export function panel(html: string, tone: 'cream' | 'blue' | 'canvas' = 'cream'): string {
+  const bg = tone === 'blue' ? PALE_BLUE : tone === 'canvas' ? CANVAS : CREAM;
+
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+      bg +
+      '; border-radius:14px;">',
+    '<tr><td style="padding:24px 24px 26px 24px;">',
+    html,
+    '</td></tr>',
+    '</table>'
+  ].join('');
+}
+
+/** A panel heading, with optional supporting line. */
+export function panelHeading(language: EmailLanguage, title: string, lede?: string): string {
+  const ledeRow = lede
+    ? '<p style="margin:0 0 18px 0; font-family:' +
+      BODY[language] +
+      '; font-size:13px; line-height:21px; color:' +
+      MUTED +
+      ';">' +
+      escapeHtml(lede) +
+      '</p>'
+    : '';
+
+  return (
+    '<h3 style="margin:0 0 ' +
+    (lede ? '6px' : '10px') +
+    ' 0; font-family:' +
+    DISPLAY[language] +
+    '; font-size:16px; line-height:24px; font-weight:bold; color:' +
+    INK +
+    ';">' +
+    escapeHtml(title) +
+    '</h3>' +
+    ledeRow
+  );
+}
+
+export interface NumberedItem {
+  title: string;
   body: string;
-  /**
-   * The buttons, in reading order.
-   *
-   * A list rather than a single CTA because the report-ready email genuinely
-   * has two destinations — the first-sale report and, when it was bought, the
-   * cross-sale one — and collapsing them into one button would mean sending a
-   * customer to a page to find the other document themselves.
-   */
-  actions: EmailAction[];
-  /** Rendered discount panel, when the message carries a code. */
-  discountBlock?: string;
-  /** Small print under the buttons, e.g. an expiry note. */
-  footnote?: string;
-  siteUrl: string;
-  brandName?: string;
+}
+
+/**
+ * The numbered feature list — 01, 02, 03 in coral.
+ *
+ * Numbers rather than bullets because they imply a set with a size: the reader
+ * knows at 01 that there is a finite list, which a dot does not tell them.
+ */
+export function numberedList(language: EmailLanguage, items: NumberedItem[]): string {
+  return items
+    .map((item, i) => {
+      const last = i === items.length - 1;
+      return [
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"' +
+          (last ? '' : ' style="margin-bottom:18px;"') +
+          '>',
+        '<tr>',
+        '<td width="34" valign="top" style="font-family:' +
+          BODY[language] +
+          '; font-size:13px; line-height:22px; font-weight:bold; color:' +
+          CORAL +
+          ';">' +
+          String(i + 1).padStart(2, '0') +
+          '</td>',
+        '<td valign="top">',
+        '<p style="margin:0 0 3px 0; font-family:' +
+          DISPLAY[language] +
+          '; font-size:15px; line-height:22px; font-weight:bold; color:' +
+          INK +
+          ';">' +
+          escapeHtml(item.title) +
+          '</p>',
+        '<p style="margin:0; font-family:' +
+          BODY[language] +
+          '; font-size:13px; line-height:21px; color:' +
+          MUTED +
+          ';">' +
+          escapeHtml(item.body) +
+          '</p>',
+        '</td>',
+        '</tr>',
+        '</table>'
+      ].join('');
+    })
+    .join('');
+}
+
+/**
+ * The credentials block.
+ *
+ * The password is set in monospace and letter-spaced, because the one thing
+ * this block has to survive is being retyped by hand from a phone screen.
+ */
+export function credentialsPanel(
+  language: EmailLanguage,
+  opts: { emailLabel: string; email: string; passwordLabel: string; password: string | null; note?: string }
+): string {
+  const rows: string[] = [
+    '<tr><td style="padding:14px 16px ' +
+      (opts.password ? '6px' : '14px') +
+      ' 16px;">' +
+      '<p style="margin:0 0 2px 0; font-family:' +
+      BODY[language] +
+      '; font-size:10px; line-height:16px; letter-spacing:1.2px; text-transform:uppercase; color:' +
+      FAINT +
+      ';">' +
+      escapeHtml(opts.emailLabel) +
+      '</p>' +
+      '<p style="margin:0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:14px; line-height:22px; font-weight:bold; color:' +
+      NAVY +
+      '; word-break:break-all;">' +
+      escapeHtml(opts.email) +
+      '</p>' +
+      '</td></tr>'
+  ];
+
+  if (opts.password) {
+    rows.push(
+      '<tr><td style="padding:8px 16px 14px 16px;">' +
+        '<p style="margin:0 0 2px 0; font-family:' +
+        BODY[language] +
+        '; font-size:10px; line-height:16px; letter-spacing:1.2px; text-transform:uppercase; color:' +
+        FAINT +
+        ';">' +
+        escapeHtml(opts.passwordLabel) +
+        '</p>' +
+        '<p style="margin:0; font-family:' +
+        MONO +
+        '; font-size:15px; line-height:22px; font-weight:bold; letter-spacing:1px; color:' +
+        NAVY +
+        ';">' +
+        escapeHtml(opts.password) +
+        '</p>' +
+        '</td></tr>'
+    );
+  } else if (opts.note) {
+    rows.push(
+      '<tr><td style="padding:0 16px 14px 16px;">' +
+        '<p style="margin:0; font-family:' +
+        BODY[language] +
+        '; font-size:12px; line-height:20px; color:' +
+        MUTED +
+        ';">' +
+        escapeHtml(opts.note) +
+        '</p>' +
+        '</td></tr>'
+    );
+  }
+
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+      CARD +
+      '; border:1px solid ' +
+      HAIRLINE +
+      '; border-radius:10px;">',
+    rows.join(''),
+    '</table>'
+  ].join('');
+}
+
+/** A note set off by a coral rule — for the one caveat that must not be missed. */
+export function ruleNote(language: EmailLanguage, html: string): string {
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-left:3px solid ' +
+      CORAL +
+      ';">',
+    '<tr><td style="padding:2px 0 2px 16px; font-family:' +
+      BODY[language] +
+      '; font-size:13px; line-height:22px; color:' +
+      MUTED +
+      ';">',
+    html,
+    '</td></tr>',
+    '</table>'
+  ].join('');
+}
+
+export interface RecordField {
+  label: string;
+  value: string;
+}
+
+/** The two-up reference row above the footer: order number, date. */
+export function recordRow(language: EmailLanguage, fields: RecordField[]): string {
+  const cells = fields
+    .map((field, i) => {
+      const pad = i === 0 ? 'padding:18px 12px 0 0;' : 'padding:18px 0 0 12px;';
+      return (
+        '<td width="50%" class="stack" style="' +
+        pad +
+        '">' +
+        '<p style="margin:0 0 2px 0; font-family:' +
+        BODY[language] +
+        '; font-size:10px; line-height:14px; letter-spacing:1.4px; text-transform:uppercase; color:' +
+        FAINT +
+        ';">' +
+        escapeHtml(field.label) +
+        '</p>' +
+        '<p style="margin:0; font-family:' +
+        BODY[language] +
+        '; font-size:13px; line-height:20px; font-weight:bold; color:' +
+        NAVY +
+        ';">' +
+        escapeHtml(field.value) +
+        '</p>' +
+        '</td>'
+      );
+    })
+    .join('');
+
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid ' +
+      HAIRLINE +
+      ';">',
+    '<tr>' + cells + '</tr>',
+    '</table>'
+  ].join('');
+}
+
+/** The receipt table: a label on the left, an amount on the right. */
+export function receipt(
+  language: EmailLanguage,
+  opts: { eyebrow: string; rows: RecordField[] }
+): string {
+  const lines = opts.rows
+    .map((row, i) => {
+      const pad = i === 0 ? '0' : '10px 0 0 0';
+      return (
+        '<tr>' +
+        '<td style="padding:' +
+        pad +
+        '; font-family:' +
+        BODY[language] +
+        '; font-size:13px; line-height:22px; color:' +
+        MUTED +
+        ';">' +
+        escapeHtml(row.label) +
+        '</td>' +
+        '<td align="right" style="padding:' +
+        pad +
+        '; font-family:' +
+        DISPLAY[language] +
+        '; font-size:14px; line-height:22px; font-weight:bold; color:' +
+        NAVY +
+        ';">' +
+        escapeHtml(row.value) +
+        '</td>' +
+        '</tr>'
+      );
+    })
+    .join('');
+
+  return [
+    '<p style="margin:0 0 14px 0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
+      CORAL +
+      ';">' +
+      escapeHtml(opts.eyebrow) +
+      '</p>',
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">',
+    lines,
+    '</table>'
+  ].join('');
+}
+
+/** A section heading in the body flow: coral eyebrow over a dark title. */
+export function sectionHeading(language: EmailLanguage, eyebrow: string, title: string): string {
+  return (
+    '<p style="margin:0 0 4px 0; font-family:' +
+    DISPLAY[language] +
+    '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
+    CORAL +
+    ';">' +
+    escapeHtml(eyebrow) +
+    '</p>' +
+    '<h2 style="margin:0 0 22px 0; font-family:' +
+    DISPLAY[language] +
+    '; font-size:20px; line-height:28px; font-weight:bold; letter-spacing:-0.3px; color:' +
+    INK +
+    ';">' +
+    escapeHtml(title) +
+    '</h2>'
+  );
+}
+
+/** A paragraph in the body voice. Content is escaped unless `html` is set. */
+export function paragraph(text: string, opts: { html?: boolean } = {}): string {
+  return (
+    '<p style="margin:0 0 14px 0; font-size:15px; line-height:26px; color:' +
+    MUTED +
+    ';">' +
+    (opts.html ? text : escapeHtml(text)) +
+    '</p>'
+  );
+}
+
+/** Renders the "your score was N" callout, or nothing when no score is known. */
+export function scoreLine(language: EmailLanguage, score: number | null): string {
+  if (score === null) return '';
+
+  const label = language === 'ja' ? 'あなたのIQスコア' : 'Your IQ score';
+
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;">',
+    '<tr><td style="background:' +
+      CREAM +
+      '; border-radius:10px; padding:12px 18px;">',
+    '<span style="font-family:' +
+      BODY[language] +
+      '; font-size:12px; color:' +
+      FAINT +
+      ';">' +
+      escapeHtml(label) +
+      '</span>',
+    '<span style="font-family:' +
+      DISPLAY[language] +
+      '; font-size:22px; font-weight:bold; color:' +
+      INK +
+      '; padding-left:12px;">' +
+      escapeHtml(score) +
+      '</span>',
+    '</td></tr>',
+    '</table>'
+  ].join('');
 }
 
 /** The discount panel: the code itself, large enough to read on a phone. */
@@ -119,55 +577,188 @@ export function discountPanel(
         ? percent + '% OFF COUPON CODE'
         : 'COUPON CODE';
 
-  const hint =
-    language === 'ja'
-      ? 'ボタンから進むと、お会計時に自動で適用されます。'
-      : 'Use the button below and it is applied automatically at checkout.';
-
   return [
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px;">',
-    '<tr>',
-    '<td align="center" style="background:#eef2ff;border:1px dashed ' + BRAND + ';border-radius:10px;padding:20px 16px;">',
-    '<p style="margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:' + BRAND + ';font-weight:700;">' + escapeHtml(label) + '</p>',
-    '<p style="margin:0 0 8px;font-size:30px;line-height:1.1;font-weight:700;color:' + INK + ';letter-spacing:.12em;">' + escapeHtml(code) + '</p>',
-    '<p style="margin:0;font-size:12px;color:' + MUTED + ';">' + escapeHtml(hint) + '</p>',
-    '</td>',
-    '</tr>',
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+      CREAM +
+      '; border-radius:14px;">',
+    '<tr><td align="center" style="padding:22px 24px;">',
+    '<p style="margin:0 0 8px 0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
+      CORAL +
+      ';">' +
+      escapeHtml(label) +
+      '</p>',
+    '<p style="margin:0; font-family:' +
+      MONO +
+      '; font-size:26px; line-height:34px; font-weight:bold; letter-spacing:3px; color:' +
+      NAVY +
+      ';">' +
+      escapeHtml(code) +
+      '</p>',
+    '</td></tr>',
     '</table>'
   ].join('');
 }
 
-/**
- * The button block.
- *
- * Each button is its own single-cell table stacked on the next, rather than
- * buttons sitting side by side in one row. Outlook lays tables out with Word
- * and will not shrink a two-column row on a narrow screen, so a side-by-side
- * pair reliably overflows on a phone — where most of these are opened. Stacked
- * is less pretty and always readable.
- */
-function renderActions(actions: EmailAction[], font: string): string {
-  if (actions.length === 0) return '';
+/* ── the shell ────────────────────────────────────────────────────────────── */
 
+export interface LayoutSection {
+  /** Pre-rendered HTML. Rendered inside the 40px gutter. */
+  html: string;
+  /** Top padding above this section. Defaults to 32px. */
+  gap?: number;
+}
+
+interface LayoutOptions {
+  language: EmailLanguage;
+  /** Small line above the headline — usually the urgency cue. */
+  eyebrow?: string;
+  headline: string;
+  /** Pre-rendered HTML for the message body, directly under the headline. */
+  body: string;
+  /** Right-hand label in the masthead, e.g. "Report ready". */
+  mastheadTag?: string;
+  /**
+   * The line shown in the inbox list, before the message is opened.
+   *
+   * Worth setting on every design: left empty, clients pull the first words of
+   * the body instead, which is usually the greeting and tells the reader
+   * nothing about whether to open it.
+   */
+  previewText?: string;
+  /** Blocks under the body, in order. */
+  sections?: LayoutSection[];
+  /**
+   * The buttons, in reading order.
+   *
+   * A list rather than a single CTA because the report-ready email genuinely
+   * has two destinations — the first-sale report and, when it was bought, the
+   * cross-sale one — and collapsing them into one would mean sending a customer
+   * to a page to find the other document themselves.
+   */
+  actions?: EmailAction[];
+  /** Rendered discount panel, when the message carries a code. */
+  discountBlock?: string;
+  /** Small print under the buttons, e.g. an expiry note. */
+  footnote?: string;
+  /** Replaces the default "you are receiving this because…" line. */
+  footerNote?: string;
+  /** The address this was sent to, named in the footer so it is verifiable. */
+  recipientEmail?: string;
+  siteUrl: string;
+  brandName?: string;
+}
+
+const FOOTER_COPY: Record<EmailLanguage, { receiving: string; questions: string; support: string; privacy: string; terms: string; subscription: string }> = {
+  en: {
+    receiving: 'You are receiving this because you took the myIQ Test with the email address',
+    questions: 'Questions? Write to',
+    support: 'and a person will reply.',
+    privacy: 'Privacy',
+    terms: 'Terms',
+    subscription: 'Subscription terms'
+  },
+  ja: {
+    receiving: 'このメールは、次のメールアドレスでmyIQテストを受験された方にお送りしています：',
+    questions: 'ご不明な点がございましたら、',
+    support: 'までご連絡ください。担当者よりご返信いたします。',
+    privacy: 'プライバシーポリシー',
+    terms: '利用規約',
+    subscription: 'サブスクリプション規約'
+  }
+};
+
+const SUPPORT_EMAIL = 'support@myiq-test.com';
+
+/** The invisible line clients show beside the subject, plus a spacer. */
+function previewBlock(text: string): string {
+  // The spacer stops the client pulling body copy in after the preview line.
+  const spacer = '&#847;&nbsp;'.repeat(24);
+
+  return (
+    '<div style="display:none; font-size:1px; line-height:1px; max-height:0; max-width:0; opacity:0; overflow:hidden; mso-hide:all;">' +
+    escapeHtml(text) +
+    ' ' +
+    spacer +
+    '</div>'
+  );
+}
+
+function renderActions(language: EmailLanguage, actions: EmailAction[]): string {
   return actions
-    .map((action) => {
-      const filled = action.primary === true;
-
-      const cell = filled
-        ? 'background:' + BRAND + ';border-radius:8px;'
-        : 'background:#ffffff;border:2px solid ' + BRAND + ';border-radius:8px;';
-
-      const text = filled ? '#ffffff' : BRAND;
-
-      return [
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 10px;">',
-        '<tr><td align="center" style="' + cell + '">',
-        '<a href="' + escapeHtml(action.url) + '" style="display:inline-block;padding:14px 34px;font-family:' + font + ';font-size:16px;font-weight:700;color:' + text + ';text-decoration:none;">' + escapeHtml(action.label) + '</a>',
-        '</td></tr>',
-        '</table>'
-      ].join('');
-    })
+    .map((action) =>
+      '<tr><td align="center" style="padding-bottom:10px;">' +
+      button(language, action.label, action.url, { tone: action.primary ? 'coral' : 'navy' }) +
+      '</td></tr>'
+    )
     .join('');
+}
+
+function renderFooter(language: EmailLanguage, opts: LayoutOptions): string {
+  const copy = FOOTER_COPY[language];
+  const body = BODY[language];
+  const legalBase = 'https://myiq-test.com/' + language + '/legal/';
+
+  const receiving = opts.footerNote
+    ? escapeHtml(opts.footerNote)
+    : escapeHtml(copy.receiving) +
+      (opts.recipientEmail ? ' ' + escapeHtml(opts.recipientEmail) : '') +
+      (language === 'ja' ? '' : '.');
+
+  const legalLink = (slug: string, label: string) =>
+    '<a href="' +
+    legalBase +
+    slug +
+    '" target="_blank" style="color:' +
+    PALE +
+    '; text-decoration:underline;">' +
+    escapeHtml(label) +
+    '</a>';
+
+  return [
+    '<tr><td class="px" style="padding:28px 40px 34px 40px;">',
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid ' +
+      HAIRLINE +
+      ';">',
+    '<tr><td style="padding-top:20px;">',
+    '<p style="margin:0 0 12px 0; font-family:' +
+      body +
+      '; font-size:12px; line-height:20px; color:' +
+      MUTED +
+      ';">' +
+      receiving +
+      '</p>',
+    '<p style="margin:0 0 12px 0; font-family:' +
+      body +
+      '; font-size:12px; line-height:20px; color:' +
+      MUTED +
+      ';">' +
+      escapeHtml(copy.questions) +
+      ' <a href="mailto:' +
+      SUPPORT_EMAIL +
+      '" style="color:' +
+      LINK +
+      '; text-decoration:underline;">' +
+      SUPPORT_EMAIL +
+      '</a> ' +
+      escapeHtml(copy.support) +
+      '</p>',
+    '<p style="margin:0; font-family:' +
+      body +
+      '; font-size:11px; line-height:18px; color:' +
+      PALE +
+      ';">' +
+      legalLink('privacy', copy.privacy) +
+      '&nbsp;&middot;&nbsp;' +
+      legalLink('terms', copy.terms) +
+      '&nbsp;&middot;&nbsp;' +
+      legalLink('subscription', copy.subscription) +
+      '</p>',
+    '</td></tr>',
+    '</table>',
+    '</td></tr>'
+  ].join('');
 }
 
 /** Wraps a design's body in the branded shell. */
@@ -177,82 +768,157 @@ export function renderLayout(options: LayoutOptions): string {
     eyebrow,
     headline,
     body,
-    actions,
+    mastheadTag,
+    previewText,
+    sections = [],
+    actions = [],
     discountBlock = '',
     footnote,
-    siteUrl,
-    brandName = 'MyIQTest'
+    siteUrl
   } = options;
 
-  const font = FONT_STACK[language];
-  const receivingNote =
-    language === 'ja'
-      ? 'このメールは、IQテストを受験された方にお送りしています。'
-      : 'You are receiving this because you took our IQ test.';
+  const display = DISPLAY[language];
+  const bodyFont = BODY[language];
+  const logo = LOGO[language];
+
+  const row = (html: string, padding: string) =>
+    '<tr><td class="px" style="padding:' + padding + '">' + html + '</td></tr>';
 
   const eyebrowRow = eyebrow
-    ? '<p style="margin:0 0 10px;font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:' +
-      BRAND +
+    ? '<p style="margin:0 0 10px 0; font-family:' +
+      display +
+      '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
+      CORAL +
       ';">' +
       escapeHtml(eyebrow) +
       '</p>'
     : '';
 
+  const sectionRows = sections
+    .filter((section) => section.html)
+    .map((section) => row(section.html, (section.gap ?? 32) + 'px 40px 0 40px'))
+    .join('');
+
+  const discountRow = discountBlock ? row(discountBlock, '32px 40px 0 40px') : '';
+
+  const actionRows = actions.length
+    ? row(
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">' +
+          renderActions(language, actions) +
+          '</table>',
+        '30px 40px 0 40px'
+      )
+    : '';
+
   const footnoteRow = footnote
-    ? '<tr><td align="center" style="padding:14px 34px 0;font-family:' +
-      font +
-      ';font-size:12px;line-height:1.6;color:' +
-      MUTED +
-      ';">' +
-      escapeHtml(footnote) +
-      '</td></tr>'
+    ? row(
+        '<p style="margin:0; font-family:' +
+          bodyFont +
+          '; font-size:12px; line-height:20px; color:' +
+          FAINT +
+          '; text-align:center;">' +
+          escapeHtml(footnote) +
+          '</p>',
+        '16px 40px 0 40px'
+      )
     : '';
 
   return [
     '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">',
     '<html xmlns="http://www.w3.org/1999/xhtml" lang="' + language + '">',
     '<head>',
-    '<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />',
+    '<meta charset="utf-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+    '<meta http-equiv="X-UA-Compatible" content="IE=edge" />',
+    '<meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />',
+    '<meta name="color-scheme" content="light" />',
+    '<meta name="supported-color-schemes" content="light" />',
     '<meta name="x-apple-disable-message-reformatting" />',
     '<title>' + escapeHtml(headline) + '</title>',
+    '<!--[if mso]>',
+    '<noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>',
+    '<![endif]-->',
+    '<style type="text/css">',
+    // Progressive enhancement only. Every rule that matters is also inline,
+    // because Gmail's clipped view and several Outlook builds drop this block.
+    'body, table, td, a { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }',
+    'table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }',
+    'img { -ms-interpolation-mode:bicubic; border:0; height:auto; line-height:100%; outline:none; text-decoration:none; }',
+    'body { margin:0 !important; padding:0 !important; width:100% !important; }',
+    'a { color:' + LINK + '; }',
+    '@media screen and (max-width:620px) {',
+    '  .wrapper { width:100% !important; }',
+    '  .px { padding-left:22px !important; padding-right:22px !important; }',
+    '  .stack { display:block !important; width:100% !important; max-width:100% !important; }',
+    '  .h1 { font-size:24px !important; line-height:32px !important; }',
+    '  .score-num { font-size:56px !important; line-height:60px !important; }',
+    '  .btn a { display:block !important; }',
+    '}',
+    '</style>',
     '</head>',
-    '<body style="margin:0;padding:0;background:' + CANVAS + ';">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:' + CANVAS + ';">',
-    '<tr><td align="center" style="padding:32px 16px;">',
-    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid ' + BORDER + ';">',
+    '<body style="margin:0; padding:0; width:100%; background-color:' + CANVAS + ';">',
+    previewText ? previewBlock(previewText) : '',
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+      CANVAS +
+      ';">',
+    '<tr><td align="center" style="padding:24px 12px 40px 12px;">',
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="wrapper" style="width:600px; max-width:600px; background-color:' +
+      CARD +
+      ';">',
 
-    // Header
-    '<tr><td align="center" style="background:' + BRAND + ';padding:22px 24px;">',
-    '<a href="' + escapeHtml(siteUrl) + '" style="font-family:' + font + ';font-size:18px;font-weight:700;color:#ffffff;text-decoration:none;letter-spacing:.02em;">' + escapeHtml(brandName) + '</a>',
+    // Masthead
+    '<tr><td class="px" style="padding:28px 40px 22px 40px; border-bottom:2px solid ' + NAVY + ';">',
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>',
+    '<td align="left">',
+    '<a href="' + escapeHtml(siteUrl) + '" target="_blank" style="text-decoration:none;">',
+    '<img src="' +
+      logo.src +
+      '" width="' +
+      logo.width +
+      '" height="' +
+      logo.height +
+      '" alt="' +
+      escapeHtml(logo.alt) +
+      '" style="display:block; border:0; outline:none; text-decoration:none; width:' +
+      logo.width +
+      'px; height:' +
+      logo.height +
+      'px;" />',
+    '</a>',
+    '</td>',
+    '<td align="right" style="font-family:' +
+      display +
+      '; font-size:10px; line-height:16px; font-weight:bold; letter-spacing:1.6px; text-transform:uppercase; color:' +
+      FAINT +
+      ';">' +
+      escapeHtml(mastheadTag ?? '') +
+      '</td>',
+    '</tr></table>',
     '</td></tr>',
 
-    // Headline + body
-    '<tr><td style="padding:34px 34px 6px;font-family:' + font + ';">',
-    eyebrowRow,
-    '<h1 style="margin:0 0 18px;font-size:23px;line-height:1.4;font-weight:700;color:' + INK + ';">' + escapeHtml(headline) + '</h1>',
-    '<div style="font-size:15px;line-height:1.8;color:#374151;">' + body + '</div>',
-    '</td></tr>',
+    // Headline and lede
+    row(
+      eyebrowRow +
+        '<h1 class="h1" style="margin:0 0 14px 0; font-family:' +
+        display +
+        '; font-size:28px; line-height:36px; font-weight:bold; letter-spacing:-0.6px; color:' +
+        INK +
+        ';">' +
+        escapeHtml(headline) +
+        '</h1>' +
+        '<div style="font-family:' +
+        bodyFont +
+        ';">' +
+        body +
+        '</div>',
+      '34px 40px 0 40px'
+    ),
 
-    // Discount panel
-    '<tr><td style="padding:22px 34px 0;font-family:' + font + ';">' + discountBlock + '</td></tr>',
-
-    // Buttons
-    '<tr><td align="center" style="padding:0 34px 8px;font-family:' + font + ';">',
-    renderActions(actions, font),
-    '</td></tr>',
-
+    sectionRows,
+    discountRow,
+    actionRows,
     footnoteRow,
-
-    // Footer
-    '<tr><td style="padding:30px 34px 34px;">',
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td style="border-top:1px solid ' + BORDER + ';font-size:0;line-height:0;">&nbsp;</td></tr></table>',
-    '<p style="margin:18px 0 0;font-family:' + font + ';font-size:12px;line-height:1.7;color:' + MUTED + ';">',
-    escapeHtml(receivingNote),
-    '<br />',
-    '<a href="' + escapeHtml(siteUrl) + '" style="color:' + MUTED + ';text-decoration:underline;">' + escapeHtml(brandName) + '</a>',
-    '</p>',
-    '</td></tr>',
+    renderFooter(language, options),
 
     '</table>',
     '</td></tr>',
@@ -260,25 +926,4 @@ export function renderLayout(options: LayoutOptions): string {
     '</body>',
     '</html>'
   ].join('\n');
-}
-
-/** A paragraph in the body voice. Content is escaped unless `html` is set. */
-export function paragraph(text: string, opts: { html?: boolean } = {}): string {
-  return '<p style="margin:0 0 14px;">' + (opts.html ? text : escapeHtml(text)) + '</p>';
-}
-
-/** Renders the "your score was N" callout, or nothing when no score is known. */
-export function scoreLine(language: EmailLanguage, score: number | null): string {
-  if (score === null) return '';
-
-  const label = language === 'ja' ? 'あなたのIQスコア' : 'Your IQ score';
-
-  return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;">',
-    '<tr><td style="background:#f9fafb;border:1px solid ' + BORDER + ';border-radius:8px;padding:12px 18px;">',
-    '<span style="font-size:12px;color:' + MUTED + ';">' + escapeHtml(label) + '</span>',
-    '<span style="font-size:22px;font-weight:700;color:' + INK + ';padding-left:12px;">' + escapeHtml(score) + '</span>',
-    '</td></tr>',
-    '</table>'
-  ].join('');
 }

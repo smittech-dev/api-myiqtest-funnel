@@ -674,6 +674,11 @@ Interactive docs are served once the app is running:
 | `http://localhost:5000/docs` | Swagger UI — browse and call every endpoint |
 | `http://localhost:5000/docs.json` | Raw OpenAPI 3.0 spec (import into Postman/Insomnia) |
 
+The OpenAPI `servers` list is built per request from the host the docs were loaded on, so a deployed
+`/docs` targets its own domain without `APP_URL` having to be right. Behind a TLS-terminating proxy
+this needs `X-Forwarded-Proto` to be forwarded, or the URLs come out `http://` — `trust proxy` is
+enabled automatically when `NODE_ENV=production`.
+
 The spec lives in [`src/config/swagger.config.ts`](src/config/swagger.config.ts) and is mounted
 before the API-key middleware, so the docs stay reachable even when `API_KEY` is set. If it is set,
 click **Authorize** in Swagger UI and enter the key to send the `x-api-key` header.

@@ -137,6 +137,35 @@ export const config = {
     bcryptRounds: parseInt(process.env.ADMIN_BCRYPT_ROUNDS || '10', 10)
   },
 
+  /**
+   * Boost My IQ — the members' area of the brain training programme.
+   *
+   * Its session secret is deliberately separate from the admin one. Sharing a
+   * secret between the admin panel and the members' area would make an admin
+   * token a valid member token and, far worse, a member token a valid admin
+   * one. The `typ` claim is checked on top, so a token minted for one audience
+   * is rejected by the other even if the two secrets are ever misconfigured to
+   * match.
+   */
+  boost: {
+    jwtSecret: process.env.BOOST_JWT_SECRET || 'boost_member_jwt_dev_secret_change_me',
+    /** "Keep me signed in". Sessions without it get `jwtShortExpiresIn`. */
+    jwtExpiresIn: process.env.BOOST_JWT_EXPIRES_IN || '60d',
+    jwtShortExpiresIn: process.env.BOOST_JWT_SHORT_EXPIRES_IN || '12h',
+    /** Where the members' app is served — reset links are built from this. */
+    appUrl: process.env.BOOST_APP_URL || 'http://localhost:5173',
+    /**
+     * Origins allowed to call the members' API with credentials. A credentialed
+     * request cannot be answered with `Access-Control-Allow-Origin: *`, so this
+     * has to be an explicit list rather than a wildcard.
+     */
+    appOrigins: (process.env.BOOST_APP_ORIGINS || 'http://localhost:5173')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+    passwordResetTtlMinutes: parseInt(process.env.BOOST_PASSWORD_RESET_TTL_MINUTES || '60', 10)
+  },
+
   encryptionKey: process.env.ENCRYPTION_KEY || 'iq_funnel_secure_secret_key_2026',
   apiKey: process.env.API_KEY || '',
   

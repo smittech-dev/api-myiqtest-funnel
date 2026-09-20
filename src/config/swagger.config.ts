@@ -24,10 +24,11 @@ export const swaggerSpec = {
       'Every `quiz_id` in this API is the **encrypted** id returned by `/questions/submit`.'
     ].join('\n')
   },
-  servers: [
-    { url: config.appUrl, description: 'Configured APP_URL' },
-    { url: `http://localhost:${config.port}`, description: 'Local development' }
-  ],
+  // Placeholder only. The list actually served is rebuilt per request by
+  // `swaggerSpecFor` below, so that "Try it out" targets the host the docs were
+  // loaded from. This static value is what anything importing the spec directly
+  // (codegen, a schema dump) sees.
+  servers: [{ url: config.appUrl, description: 'Configured APP_URL' }],
   tags: [
     { name: 'Health', description: 'Service liveness' },
     { name: 'Quiz', description: 'Quiz submission and funnel redirect guard' },
@@ -857,3 +858,63 @@ export const swaggerSpec = {
     }
   }
 };
+
+/**
+ * The spec with its `servers` list resolved against the request that asked for it.
+ *
+ * Swagger UI sends every "Try it out" call to `servers[0]`, so whatever sits
+ * there is the base URL a reader ends up hitting. Pinning that to `APP_URL` made
+ * it only ever as correct as that one variable: deployed with the default still
+ * in place, the production docs invite everyone to call `http://localhost:5000`.
+ *
+ * Deriving the origin from the incoming request removes the variable from the
+ * loop entirely — the docs point at the domain they were served from, whatever
+ * that is, and a new environment needs no config to be right.
+ *
+ * Two things this depends on:
+ *   - `trust proxy` being set (see app.ts), or `req.protocol` reports the
+ *     plaintext hop behind a TLS-terminating proxy and every URL comes out
+ *     `http://` on an HTTPS site.
+ *   - `Host` being trustworthy. It is attacker-controlled in general, but the
+ *     only thing it can affect here is which URL a human sees in a docs page
+ *     they already chose to open — no token, cookie or redirect keys off it.
+ */
+export function swaggerSpecFor(req: { protocol: string; get(name: string): string | undefined }) {
+  const host = req.get('host');
+  const servers: { url: string; description: string }[] = [];
+
+  if (host) {
+    servers.push({ url: `${req.protocol}://${host}`, description: 'This server' });
+  }
+
+  // Kept as a secondary entry: when it disagrees with the request origin — a
+  // proxy rewriting the path, say — the reader can pick the other one rather
+  // than being stuck with a base URL that does not work.
+  //
+  // Except when it points at loopback on a production box, which is the default
+  // nobody remembered to change. That entry cannot work for any reader of a
+  // deployed docs page, so offering it only invites someone to select it and
+  // wonder why every call fails.
+  const appUrlIsLoopback = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(
+    config.appUrl
+  );
+  const hideAppUrl = config.env === 'production' && appUrlIsLoopback;
+  if (config.appUrl && !hideAppUrl && !servers.some((s) => s.url === config.appUrl)) {
+    servers.push({ url: config.appUrl, description: 'Configured APP_URL' });
+  }
+
+  // Offering localhost on a production docs page is noise at best and a
+  // confusing dead end at worst, so it appears only where it can work.
+  const localUrl = `http://localhost:${config.port}`;
+  if (config.env !== 'production' && !servers.some((s) => s.url === localUrl)) {
+    servers.push({ url: localUrl, description: 'Local development' });
+  }
+
+  // `servers` must be non-empty to be valid, and a request with no Host header
+  // and no APP_URL could otherwise get here empty-handed.
+  if (servers.length === 0) {
+    servers.push({ url: localUrl, description: 'Local development' });
+  }
+
+  return { ...swaggerSpec, servers };
+}

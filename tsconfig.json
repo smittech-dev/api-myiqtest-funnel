@@ -13,6 +13,10 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "resolveJsonModule": true,
+    // src/boost-engine is plain JavaScript copied verbatim from the frontend —
+    // see its README. allowJs (without checkJs) compiles it into dist as-is
+    // rather than making us maintain a hand-written port in TypeScript.
+    "allowJs": true,
     "allowSyntheticDefaultImports": true
   },
   "include": ["src/**/*", "data/**/*"],

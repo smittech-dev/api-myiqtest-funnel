@@ -12,6 +12,16 @@ export interface PricedProduct {
 
 export interface SubscriptionPricedProduct extends PricedProduct {
   price_id: string;
+  /**
+   * Days between charges — 28, not a calendar month.
+   *
+   * Sent so the checkout can state the actual cycle. "Monthly" beside a 28-day
+   * subscription is thirteen charges a year described as twelve, which is the
+   * kind of mismatch that turns into chargebacks.
+   */
+  interval_days: number;
+  /** Free days before the first charge. 0 when there is no trial. */
+  trial_days: number;
 }
 
 export interface PricingResponseData {

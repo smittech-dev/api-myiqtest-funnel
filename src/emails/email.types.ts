@@ -52,6 +52,51 @@ export interface EmailTemplateContext {
   /** What they are signing in to, e.g. the brain training programme. */
   program_name: string | null;
 
+  // --- order and billing detail (welcome, report-ready) -------------------
+  // Shown so the customer can reconcile the email against their bank
+  // statement without contacting us.
+
+  /** Human order number, e.g. `myIQ_8421`. */
+  order_ref: string | null;
+  /** The date the purchase completed, already formatted for the language. */
+  order_date: string | null;
+  /** The quiz result this all hangs off, for the receipt line. */
+  quiz_id: string | null;
+  /** What was paid for the certificate, in the currency they paid in. */
+  first_sale_amount: string | null;
+  /** The career report, when that upsell was bought. Null when it was not. */
+  cross_sale_amount: string | null;
+  /** The recurring charge, e.g. `¥5,495` — in the currency of their funnel. */
+  subscription_price: string | null;
+  /**
+   * Days between charges, e.g. 28.
+   *
+   * Stated rather than called "monthly": the cycle drifts through the calendar,
+   * and describing thirteen charges a year as twelve is what chargebacks are
+   * made of.
+   */
+  interval_days: number | null;
+  /**
+   * When a free trial ends, already formatted.
+   *
+   * Null unless the subscription genuinely carries one, which gates the whole
+   * trial paragraph: an email must never announce a trial the customer does not
+   * have.
+   */
+  trial_end: string | null;
+  /** Plain-language band for the score, e.g. `Above average`. */
+  iq_band: string | null;
+
+  // --- password reset ----------------------------------------------------
+  // Only populated for the reset message. Like the welcome password, the token
+  // inside `reset_url` is never stored in plaintext — only its hash is — so
+  // this link exists for the length of one request and one email.
+
+  /** Where the member sets a new password, token already attached. */
+  reset_url: string | null;
+  /** How long the link stays valid, for the copy that says so. */
+  reset_expires_hours: number | null;
+
   // --- report links (report-ready email) ---------------------------------
 
   /** The first-sale report: certificate and detailed analysis. */

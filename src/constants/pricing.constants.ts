@@ -9,10 +9,25 @@ export interface ProductPricing {
 }
 
 export interface SubscriptionPricing {
-  price_id: string; // Stripe Price ID
+  /**
+   * Stripe Price ID.
+   *
+   * The amount and the billing interval live on the Price object at Stripe and
+   * are immutable there — `amount` and `interval_days` below are what we display
+   * and must be kept equal to it. `npm run check:pricing` compares the two
+   * against the live Stripe account rather than trusting that they match.
+   */
+  price_id: string;
   amount: number;
   currency: 'JPY' | 'GBP';
   title: string;
+  /**
+   * Days between charges. 28, not a calendar month — so the renewal date walks
+   * backwards through the month and "monthly" is the wrong word everywhere.
+   */
+  interval_days: number;
+  /** Free days before the first charge. */
+  trial_days: number;
 }
 
 export interface LanguagePricingConfig {
@@ -22,47 +37,64 @@ export interface LanguagePricingConfig {
   subscription: SubscriptionPricing;
 }
 
+/**
+ * The subscription bills every 28 days, not monthly.
+ *
+ * Thirteen charges a year rather than twelve, and a renewal date that walks
+ * backwards through the calendar. It is why nothing in the product says
+ * "monthly": a customer who is told "monthly" and charged on the 3rd, the 31st
+ * and the 28th has been misled, and that is a chargeback.
+ */
+export const SUBSCRIPTION_INTERVAL_DAYS = 28;
+
+/** Free days before the first charge. */
+export const SUBSCRIPTION_TRIAL_DAYS = 5;
+
 export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
   ja: {
     currency: 'JPY',
     first_sale: {
-      amount: 2980,
+      amount: 199,
       currency: 'JPY',
-      stripe_amount: 2980, // Zero-decimal in Stripe
+      stripe_amount: 199, // Zero-decimal in Stripe
       title: '公式IQ認定証＋詳細診断レポート'
     },
     cross_sale: {
-      amount: 1480,
+      amount: 1990,
       currency: 'JPY',
-      stripe_amount: 1480, // Zero-decimal in Stripe
+      stripe_amount: 1990, // Zero-decimal in Stripe
       title: 'プレミアム適職・キャリア分析レポート'
     },
     subscription: {
       price_id: config.subscription.priceIdJa,
-      amount: 980,
+      amount: 5495,
       currency: 'JPY',
-      title: 'IQ脳力トレーニング月額プラン'
+      title: 'IQ脳力トレーニング',
+      interval_days: SUBSCRIPTION_INTERVAL_DAYS,
+      trial_days: SUBSCRIPTION_TRIAL_DAYS
     }
   },
   en: {
     currency: 'GBP',
     first_sale: {
-      amount: 19.99,
+      amount: 2.99,
       currency: 'GBP',
-      stripe_amount: 1999, // Pence in Stripe (19.99 * 100)
+      stripe_amount: 299, // Pence in Stripe (2.99 * 100)
       title: 'Official IQ Certificate & Detailed Report'
     },
     cross_sale: {
-      amount: 9.99,
+      amount: 7.99,
       currency: 'GBP',
-      stripe_amount: 999, // Pence in Stripe (9.99 * 100)
+      stripe_amount: 799, // Pence in Stripe (7.99 * 100)
       title: 'Career Aptitude & Personality Report'
     },
     subscription: {
       price_id: config.subscription.priceIdEn,
-      amount: 6.99,
+      amount: 29.99,
       currency: 'GBP',
-      title: 'Monthly IQ Brain Training'
+      title: 'IQ Brain Training',
+      interval_days: SUBSCRIPTION_INTERVAL_DAYS,
+      trial_days: SUBSCRIPTION_TRIAL_DAYS
     }
   }
 };

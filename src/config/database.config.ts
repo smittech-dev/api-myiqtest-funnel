@@ -2,6 +2,10 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { config } from './env.config.js';
 import {
+  BoostAttempt,
+  BoostLevelProgress,
+  BoostPasswordReset,
+  BoostProfile,
   CurrencyRate,
   Customer,
   CustomerSubscription,
@@ -12,6 +16,8 @@ import {
   EmailMarketingStep,
   EmailTransactionalLog,
   ExternalApiLog,
+  GameRun,
+  MemberPointsLedger,
   User
 } from '../entities/index.js';
 
@@ -25,6 +31,10 @@ export const AppDataSource = new DataSource({
   synchronize: config.db.synchronize,
   logging: config.db.logging,
   entities: [
+    BoostAttempt,
+    BoostLevelProgress,
+    BoostPasswordReset,
+    BoostProfile,
     CurrencyRate,
     Customer,
     CustomerSubscription,
@@ -35,6 +45,8 @@ export const AppDataSource = new DataSource({
     EmailMarketingStep,
     EmailTransactionalLog,
     ExternalApiLog,
+    GameRun,
+    MemberPointsLedger,
     User
   ],
   migrations: [],
