@@ -3,6 +3,7 @@ import { DataSource } from 'typeorm';
 import { config } from './env.config.js';
 import {
   BoostAttempt,
+  BoostEmailChange,
   BoostLevelProgress,
   BoostPasswordReset,
   BoostProfile,
@@ -32,6 +33,7 @@ export const AppDataSource = new DataSource({
   logging: config.db.logging,
   entities: [
     BoostAttempt,
+    BoostEmailChange,
     BoostLevelProgress,
     BoostPasswordReset,
     BoostProfile,

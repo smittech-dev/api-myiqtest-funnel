@@ -441,7 +441,7 @@ export class EmailMarketingService {
     const language = this.languageOf(candidate);
     const code = step.discount_code ? step.discount_code.toUpperCase() : null;
     const percent = code ? (discountCodes[code]?.discount ?? null) : null;
-    const siteUrl = config.frontendUrl.replace(/\/+$/, '');
+    const siteUrl = config.funnelUrl;
 
     const ctaUrl = new URL(`${siteUrl}/${language}/checkout`);
     ctaUrl.searchParams.set('quiz_id', EncryptionUtil.encryptId(candidate.quiz_id));
@@ -503,7 +503,7 @@ export class EmailMarketingService {
       ? input.discountCode.toUpperCase()
       : (this.smallestDiscountCode() ?? null);
     const percent = code ? (discountCodes[code]?.discount ?? null) : null;
-    const siteUrl = config.frontendUrl.replace(/\/+$/, '');
+    const siteUrl = config.funnelUrl;
 
     const ctaUrl = new URL(`${siteUrl}/${input.language}/checkout`);
     // A sample id, not a real session: the link proves the design, and must not

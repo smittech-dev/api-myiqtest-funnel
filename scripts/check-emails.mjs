@@ -44,6 +44,10 @@ function contextFor(language, overrides = {}) {
       program_name: 'Cognitive Training Program',
       reset_url: APP + '/reset-password?token=t',
       reset_expires_hours: 1,
+      new_email: 'new.address@example.com',
+      old_email: 'customer@example.com',
+      confirm_url: APP + '/confirm-email?token=preview',
+      confirm_expires_hours: 1,
       first_sale_report_url: SITE + '/result',
       cross_sale_report_url: SITE + '/result/report',
       order_ref: 'myIQ_8421',
@@ -174,7 +178,28 @@ for (const language of LANGUAGES) {
   if (noUpsell.includes('/result/report')) fail(`report ${where}: links an unbought career report`);
   if (noUpsell.includes('£7.99')) fail(`report ${where}: bills for an unbought career report`);
 
-  // 5. A customer with no name on file gets a clean sentence, not a gap.
+  // 5. The email-change pair must not leak across addresses.
+  const confirm = renderTemplate('transactional_email_change_confirm', contextFor(language)).html;
+  if (!confirm.includes('confirm-email?token=')) fail(`email change ${where}: no confirmation link`);
+  if (!confirm.includes('new.address@example.com')) fail(`email change ${where}: does not show the new address`);
+
+  const notice = renderTemplate('transactional_email_change_notice', contextFor(language)).html;
+  if (notice.includes('confirm-email?token=')) {
+    fail(`email change notice ${where}: CARRIES THE CONFIRMATION LINK — the old address must not be able to approve its own replacement`);
+  }
+  // A security warning that asks the reader to click teaches the habit phishing
+  // relies on. `class="btn"` is what a rendered button carries — the `.btn`
+  // rule in the shell's style block is present on every message and is not one.
+  if (notice.includes('class="btn"')) {
+    fail(`email change notice ${where}: has a call-to-action button`);
+  }
+  // Only the footer's support and legal links should remain.
+  const noticeLinks = (notice.match(/href="([^"]+)"/g) ?? []).filter(
+    (h) => !h.includes('mailto:') && !h.includes('/legal/') && !h.includes('myiq-test.com"')
+  );
+  if (noticeLinks.length) fail(`email change notice ${where}: unexpected links ${noticeLinks.join(', ')}`);
+
+  // 6. A customer with no name on file gets a clean sentence, not a gap.
   const anonymous = renderTemplate(
     'transactional_report_ready',
     contextFor(language, { first_name: null, honorific_name: honorific(language, null) })

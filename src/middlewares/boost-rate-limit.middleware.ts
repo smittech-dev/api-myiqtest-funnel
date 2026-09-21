@@ -124,3 +124,54 @@ export const boostScoreLimiter = rateLimit({
     'That is a lot of games in one hour. Take a break and come back shortly.'
   )
 });
+
+/**
+ * Changing a password: 10 attempts an hour.
+ *
+ * The endpoint takes the *current* password, so without a limit an unattended
+ * session becomes a way to guess it offline-fast. Ten an hour leaves room for
+ * someone genuinely mistyping their own.
+ */
+export const boostChangePasswordLimiter = rateLimit({
+  ...shared,
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  keyGenerator: (req) => (req as Request & { member?: { customerId: string } }).member?.customerId ?? ipKey(req),
+  handler: boostLimitResponse(
+    'too_many_attempts',
+    'Too many attempts. Please wait an hour and try again.'
+  )
+});
+
+/**
+ * Email changes: 10 an hour.
+ *
+ * Each request sends mail to an address the caller typed, so without a limit
+ * this is a way to post someone else's inbox — and it also takes the current
+ * password, so it is a guessing surface too.
+ *
+ * Ten rather than five because mistyping the address you are moving to is the
+ * single most likely thing to go wrong here, and the correction costs a
+ * request. The caller must already be signed in and know the password, so the
+ * ceiling is about nuisance rather than compromise.
+ */
+export const boostEmailChangeLimiter = rateLimit({
+  ...shared,
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  keyGenerator: (req) => (req as Request & { member?: { customerId: string } }).member?.customerId ?? ipKey(req),
+  handler: boostLimitResponse(
+    'too_many_requests',
+    'Too many attempts. Please wait an hour and try again.'
+  )
+});
+
+/** Confirming: 10 an hour per IP. Guessing a 256-bit token is not the threat; hammering is. */
+export const boostConfirmEmailLimiter = rateLimit({
+  ...shared,
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  keyGenerator: ipKey,
+  handler: boostLimitResponse('too_many_requests', 'Too many attempts. Please request a new link.')
+});

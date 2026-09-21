@@ -150,7 +150,7 @@ export async function requestPasswordReset(rawEmail: unknown, ip: string | null)
   // funnel — replying in the language they bought in is less jarring than
   // switching on them mid-relationship.
   const language: EmailLanguage = quizResult?.language?.toLowerCase() === 'en' ? 'en' : 'ja';
-  const siteUrl = config.frontendUrl.replace(/\/+$/, '');
+  const siteUrl = config.funnelUrl;
   const resetUrl = `${config.boost.appUrl.replace(/\/+$/, '')}/reset-password?token=${token}`;
 
   const context = createEmailContext(
@@ -208,14 +208,7 @@ export async function resetPassword(rawToken: unknown, rawPassword: unknown): Pr
   // same to the caller.
   if (!record || record.used_at || record.expires_at.getTime() <= Date.now()) throw invalidToken();
 
-  // Mirrors the rules the reset screen already shows the member, so the server
-  // never rejects something the UI presented as acceptable.
-  if (password.length < 8) {
-    throw new BoostError(422, 'weak_password', 'Passwords must be at least 8 characters.');
-  }
-  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-    throw new BoostError(422, 'weak_password', 'Passwords must contain at least one letter and one number.');
-  }
+  assertStrongPassword(password);
 
   const customerRepo = AppDataSource.getRepository(Customer);
   const customer = await customerRepo.findOne({ where: { id: record.customer_id } });
@@ -237,4 +230,70 @@ export async function purgeExpiredResetTokens(): Promise<number> {
     expires_at: LessThan(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
   });
   return result.affected ?? 0;
+}
+
+/**
+ * Change the password of a member who is already signed in.
+ *
+ * Until now the only route was to sign out and use "forgot password", which
+ * sends someone who is looking at their own profile out of the product to fetch
+ * an email. Requiring the current password is what makes this safe to offer to
+ * a live session: an unattended laptop should not be enough to lock the owner
+ * out of their own account.
+ *
+ * Like a reset, this bumps `password_set_at`, so every other device is signed
+ * out. The caller is handed a fresh token so the session they are using
+ * survives — otherwise changing your password would sign you out of the page
+ * you changed it on.
+ */
+export async function changePassword(
+  customerId: string,
+  rawCurrent: unknown,
+  rawNext: unknown,
+  remember = true
+): Promise<{ token: string }> {
+  const current = String(rawCurrent ?? '').trim();
+  const next = String(rawNext ?? '');
+
+  const repo = AppDataSource.getRepository(Customer);
+  const customer = await repo.findOne({ where: { id: customerId } });
+
+  if (!customer?.password_set_at) {
+    throw new BoostError(401, 'unauthenticated', 'You need to sign in.');
+  }
+
+  if (!(await PasswordUtil.compare(current, customer.password_hash ?? ''))) {
+    throw new BoostError(403, 'invalid_password', 'That is not your current password.');
+  }
+
+  assertStrongPassword(next);
+
+  if (current === next) {
+    throw new BoostError(422, 'weak_password', 'Your new password must be different from the current one.');
+  }
+
+  customer.password_hash = await PasswordUtil.hash(next);
+  customer.password_set_at = new Date();
+  await repo.save(customer);
+
+  logger.info(`Password changed from the profile screen for customer ${customer.id}.`);
+
+  // Issued after the stamp, so this token is newer than the epoch it is
+  // checked against and survives the sign-out it just triggered elsewhere.
+  return { token: BoostJwtUtil.sign(customer.id, customer.email, remember) };
+}
+
+/**
+ * The password rules, in one place.
+ *
+ * Mirrors what the reset screen shows the member, so the server never rejects
+ * something the UI presented as acceptable.
+ */
+export function assertStrongPassword(password: string): void {
+  if (password.length < 8) {
+    throw new BoostError(422, 'weak_password', 'Passwords must be at least 8 characters.');
+  }
+  if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+    throw new BoostError(422, 'weak_password', 'Passwords must contain at least one letter and one number.');
+  }
 }

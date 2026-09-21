@@ -12,6 +12,14 @@ import {
   toSubscriptionDto
 } from '../services/boost-subscription.service.js';
 import { memberSnapshot } from '../services/boost-stats.service.js';
+import { changePassword } from '../services/boost-auth.service.js';
+import {
+  cancelEmailChange,
+  confirmEmailChange,
+  pendingChangeFor,
+  requestEmailChange
+} from '../services/boost-email-change.service.js';
+import { logger } from '../utils/logger.util.js';
 
 /** The member's own account: profile, preferences and membership. */
 export class BoostAccountController {
@@ -25,15 +33,20 @@ export class BoostAccountController {
     try {
       const { customer, profile } = await loadMember(req.member!.customerId);
 
-      const [subscription, snapshot] = await Promise.all([
+      const [subscription, snapshot, pendingEmail] = await Promise.all([
         findSubscription(customer.id),
-        memberSnapshot(profile)
+        memberSnapshot(profile),
+        pendingChangeFor(customer.id)
       ]);
 
       BoostResponse.ok(res, {
         user: toUserDto(customer, profile),
         subscription: await toSubscriptionDto(customer.id, subscription),
-        stats: snapshot.stats
+        stats: snapshot.stats,
+        // Non-null while an address change is waiting to be confirmed, so the
+        // profile screen can say so rather than showing the old address as if
+        // nothing were happening.
+        pendingEmail
       });
     } catch (error) {
       next(error);
@@ -107,6 +120,112 @@ export class BoostAccountController {
       await AppDataSource.getRepository(BoostProfile).save(profile);
 
       BoostResponse.ok(res, { user: toUserDto(customer, profile) });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /me/password
+   *
+   * Changes the password of a signed-in member. Requires the current one, and
+   * returns a fresh token so the session doing the changing survives while
+   * every other device is signed out.
+   */
+  static async changePassword(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { currentPassword, newPassword, remember } = req.body ?? {};
+
+      const result = await changePassword(
+        req.member!.customerId,
+        currentPassword,
+        newPassword,
+        remember !== false
+      );
+
+      BoostResponse.ok(res, result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /me/email
+   *
+   * Starts an address change. Requires the current password, and changes
+   * nothing until the new address confirms — see the service for why each of
+   * those matters.
+   */
+  static async requestEmailChange(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { newEmail, currentPassword } = req.body ?? {};
+
+      const pending = await requestEmailChange(
+        req.member!.customerId,
+        newEmail,
+        currentPassword,
+        req.ip ?? null
+      );
+
+      BoostResponse.ok(res, {
+        pendingEmail: pending,
+        message: `Check ${pending.newEmail} for a confirmation link. Your address will not change until you follow it.`
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** DELETE /me/email — drops a pending change the member no longer wants. */
+  static async cancelEmailChange(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      await cancelEmailChange(req.member!.customerId);
+      BoostResponse.ok(res, { ok: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /auth/confirm-email
+   *
+   * Public. The link is opened wherever the new address is read — often a
+   * different browser, often signed out — so the token is the credential.
+   */
+  static async confirmEmailChange(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await confirmEmailChange(req.body?.token);
+      BoostResponse.ok(res, { ok: true, ...result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /me/deletion-request
+   *
+   * Records that the member wants their account erased. Deliberately does not
+   * delete anything: the account is tied to a live subscription, payment
+   * records that have to be kept for tax, and a certificate the member bought.
+   * Untangling that is a decision for a person, not a button.
+   *
+   * The member gets an immediate, honest acknowledgement rather than a screen
+   * that appears to have done something it has not.
+   */
+  static async requestDeletion(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { customer, profile } = await loadMember(req.member!.customerId);
+
+      logger.warn(
+        `ACCOUNT DELETION REQUESTED — customer ${customer.id} (${customer.email}, member ${profile.member_id}). ` +
+          'Check for an active subscription before actioning.'
+      );
+
+      BoostResponse.ok(res, {
+        ok: true,
+        message:
+          'Your request has been logged. Support will email you within two working days to confirm before anything is erased.'
+      });
     } catch (error) {
       next(error);
     }

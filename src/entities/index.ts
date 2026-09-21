@@ -15,3 +15,4 @@ export * from './BoostLevelProgress.entity.js';
 export * from './BoostPasswordReset.entity.js';
 export * from './MemberPointsLedger.entity.js';
 export * from './GameRun.entity.js';
+export * from './BoostEmailChange.entity.js';

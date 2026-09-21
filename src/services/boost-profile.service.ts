@@ -113,6 +113,7 @@ export function toUserDto(customer: Customer, profile: BoostProfile): UserDto {
     region: profile.region ?? '',
     locale: profile.locale,
     memberId: profile.member_id,
+    timezone: profile.timezone,
     createdAt: customer.created_at.getTime(),
     passwordChangedAt: customer.password_set_at ? customer.password_set_at.getTime() : null,
     initial: displayName.trim().charAt(0).toUpperCase() || '?',

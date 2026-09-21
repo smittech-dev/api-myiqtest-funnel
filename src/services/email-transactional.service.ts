@@ -10,7 +10,7 @@ import { emailService } from './email.service.js';
 import { formatMoney } from './boost-subscription.service.js';
 import { SUBSCRIPTION_INTERVAL_DAYS } from '../constants/pricing.constants.js';
 import { generateCustomerPassword } from '../utils/customer-password.util.js';
-import { EncryptionUtil } from '../utils/encryption.util.js';
+import { reportUrlFor } from '../utils/report-url.util.js';
 import { logger } from '../utils/logger.util.js';
 import { PasswordUtil } from '../utils/password.util.js';
 
@@ -143,11 +143,11 @@ export class EmailTransactionalService {
         email: quizResult.email,
         language,
         context: this.baseContext(quizResult, quizResult.email, language, {
-          first_sale_report_url: this.reportUrl(quizResult, 'first_sale'),
+          first_sale_report_url: reportUrlFor(quizResult, 'first_sale'),
           // Null when the upsell was not bought — which is what removes the
           // second button from the design.
           cross_sale_report_url: paid('cross_sale')
-            ? this.reportUrl(quizResult, 'cross_sale')
+            ? reportUrlFor(quizResult, 'cross_sale')
             : null,
           // The receipt, taken from what actually settled.
           ...this.amountsFor(quizResult)
@@ -308,7 +308,7 @@ export class EmailTransactionalService {
   // -------------------------------------------------------------------------
 
   private siteUrl(): string {
-    return config.frontendUrl.replace(/\/+$/, '');
+    return config.funnelUrl;
   }
 
   private async resolveRecipient(
@@ -365,28 +365,6 @@ export class EmailTransactionalService {
    * are session-guarded, and a link opened days later in a different browser has
    * no session to restore from.
    */
-  private reportUrl(quizResult: CustomerQuizResult, type: 'first_sale' | 'cross_sale'): string {
-    const stored = quizResult.report_urls ?? {};
-
-    const storedUrl =
-      type === 'first_sale'
-        ? (stored.report_pdf_url ?? stored.certificate_url)
-        : stored.career_report_url;
-
-    if (typeof storedUrl === 'string' && storedUrl.trim()) {
-      return storedUrl.trim();
-    }
-
-    const language = quizResult.language?.toLowerCase() === 'en' ? 'en' : 'ja';
-    // `/result` carries the certificate and the detailed report; `/result/report`
-    // is the career and aptitude document the cross-sale unlocks.
-    const path = type === 'first_sale' ? 'result' : 'result/report';
-
-    const url = new URL(`${this.siteUrl()}/${language}/${path}`);
-    url.searchParams.set('quiz_id', EncryptionUtil.encryptId(quizResult.id));
-    return url.toString();
-  }
-
   /** The context every transactional design starts from. */
   private baseContext(
     quizResult: CustomerQuizResult,

@@ -143,6 +143,12 @@ export interface UserDto {
   region: string;
   locale: string;
   memberId: string;
+  /**
+   * IANA zone. Exposed because it decides when the member's day rolls over —
+   * and therefore when the daily quiz resets and whether a streak survives — so
+   * they need to be able to see and correct it.
+   */
+  timezone: string;
   createdAt: number;
   passwordChangedAt: number | null;
   initial: string;

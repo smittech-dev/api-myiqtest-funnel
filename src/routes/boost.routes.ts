@@ -9,7 +9,10 @@ import {
   boostForgotPasswordLimiter,
   boostResetPasswordLimiter,
   boostAttemptLimiter,
-  boostScoreLimiter
+  boostScoreLimiter,
+  boostChangePasswordLimiter,
+  boostEmailChangeLimiter,
+  boostConfirmEmailLimiter
 } from '../middlewares/boost-rate-limit.middleware.js';
 
 /**
@@ -38,12 +41,25 @@ router.post('/auth/logout', BoostAuthController.logout);
 router.post('/auth/forgot-password', boostForgotPasswordLimiter, BoostAuthController.forgotPassword);
 router.post('/auth/reset-password', boostResetPasswordLimiter, BoostAuthController.resetPassword);
 
+// Public, because the confirmation link is opened wherever the new address is
+// read — often a different browser, often signed out. The token is the
+// credential, so no session is required or expected.
+router.post(
+  '/auth/confirm-email',
+  boostConfirmEmailLimiter,
+  BoostAccountController.confirmEmailChange
+);
+
 /* ── 2. signed in ─────────────────────────────────────────────────────────── */
 
 router.use(boostAuth);
 
 router.get('/me', BoostAccountController.me);
 router.patch('/me', BoostAccountController.updateMe);
+router.post('/me/password', boostChangePasswordLimiter, BoostAccountController.changePassword);
+router.post('/me/email', boostEmailChangeLimiter, BoostAccountController.requestEmailChange);
+router.delete('/me/email', BoostAccountController.cancelEmailChange);
+router.post('/me/deletion-request', BoostAccountController.requestDeletion);
 router.get('/subscription', BoostAccountController.subscription);
 
 // Managing the membership stays outside the training guard on purpose: a

@@ -20,6 +20,8 @@
     "test:boost:resume": "node scripts/boost-resume.mjs",
     "test:boost:games": "node scripts/boost-games-check.mjs",
     "test:boost:subscription": "node scripts/boost-subscription-check.mjs",
+    "test:boost:profile": "node scripts/boost-profile-check.mjs",
+    "test:boost:email": "node scripts/boost-email-change-check.mjs",
     "backfill:boost": "tsx src/scripts/backfill-boost-profiles.ts"
   },
   "keywords": [

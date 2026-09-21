@@ -52,6 +52,17 @@ export interface EmailTemplateContext {
   /** What they are signing in to, e.g. the brain training programme. */
   program_name: string | null;
 
+  // --- changing the email address ----------------------------------------
+
+  /** Where the account is moving to. Shown on both sides of the change. */
+  new_email: string | null;
+  /** The address it is moving from. */
+  old_email: string | null;
+  /** Single-use link that completes the change, sent only to the new address. */
+  confirm_url: string | null;
+  /** How long that link stays valid, for the copy that says so. */
+  confirm_expires_hours: number | null;
+
   // --- order and billing detail (welcome, report-ready) -------------------
   // Shown so the customer can reconcile the email against their bank
   // statement without contacting us.

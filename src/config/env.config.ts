@@ -25,11 +25,33 @@ function readZeptoTemplateKeys(): Record<string, string> {
   return keys;
 }
 
+/** Trailing slashes make every `${base}/path` join produce a double slash. */
+const withoutTrailingSlash = (url: string): string => url.replace(/\/+$/, '');
+
+/**
+ * Where the quiz funnel is served.
+ *
+ * This is the site that hosts the test, the result page and the certificate —
+ * every link in an email and every document link in the members' area is built
+ * from it.
+ *
+ * `FRONTEND_URL` is the old name and still works, because it is set in
+ * deployments that predate this one. It is ambiguous now that there are two
+ * front ends: the funnel and the members' app, which has its own
+ * `BOOST_APP_URL`.
+ */
+const funnelUrl = withoutTrailingSlash(
+  process.env.FUNNEL_URL || process.env.FRONTEND_URL || 'http://localhost:3000'
+);
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '5000', 10),
   appUrl: process.env.APP_URL || 'http://localhost:5000',
-  frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+  /** The quiz funnel's origin, already normalised — never has a trailing slash. */
+  funnelUrl,
+  /** @deprecated Use `funnelUrl`. Kept so nothing outside this file breaks. */
+  frontendUrl: funnelUrl,
   
   db: {
     host: process.env.DB_HOST || 'localhost',

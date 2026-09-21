@@ -12,6 +12,7 @@ import {
   type LeaderboardScope
 } from './boost-demo.service.js';
 import { progressFor, reportRows, totalPlays } from './boost-games.service.js';
+import { documentsFor } from './boost-documents.service.js';
 import type { MemberStats } from '../types/boost.types.js';
 
 /**
@@ -39,10 +40,17 @@ function weekdayOf(dateKey: string): number {
   return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
-/** Every scored run the member has finished. Personality is excluded: it has no mark. */
-async function scoredAttempts(customerId: string): Promise<BoostAttempt[]> {
+/**
+ * Every run the member has finished, scored or not.
+ *
+ * One query rather than two: the streak counts any day they trained — a
+ * personality level is a day's training even though it has no mark — while the
+ * IQ estimate and accuracy need the scored subset, which is a filter over the
+ * same rows.
+ */
+async function submittedAttempts(customerId: string): Promise<BoostAttempt[]> {
   return attemptRepo().find({
-    where: { customer_id: customerId, status: 'submitted', is_practice: false, unscored: false },
+    where: { customer_id: customerId, status: 'submitted', is_practice: false },
     order: { submitted_at: 'ASC' }
   });
 }
@@ -111,31 +119,103 @@ function iqHistory(
 export interface MemberSnapshot {
   stats: MemberStats;
   levelsDone: number;
+  /** Scored runs only — what the IQ estimate and accuracy are built from. */
   attempts: BoostAttempt[];
+  /** Every finished run, including personality. Days trained, for the streak. */
+  submitted: BoostAttempt[];
 }
 
 /** The numbers `GET /me` reports, and the raw rows the dashboard reuses. */
 export async function memberSnapshot(profile: BoostProfile): Promise<MemberSnapshot> {
-  const [attempts, progress] = await Promise.all([
-    scoredAttempts(profile.customer_id),
+  const [submitted, progress] = await Promise.all([
+    submittedAttempts(profile.customer_id),
     boostProgression.loadProgress(profile.customer_id)
   ]);
+
+  // Personality has no mark, so it counts as a day trained but not towards
+  // accuracy or the IQ estimate.
+  const attempts = submitted.filter((a) => !a.unscored);
 
   const levelsDone = CATEGORIES.reduce(
     (total, c) => total + boostProgression.completedLevels(progress, c.key).length,
     0
   );
 
+  // Recomputed on read, not just on submit.
+  //
+  // A streak is the one statistic that changes while the member is doing
+  // nothing: stop training and it should fall to zero on its own. Reporting the
+  // stored counter meant someone who trained for five days and then stopped
+  // still saw "5-day streak" a month later — the number was only ever refreshed
+  // by the act of submitting, which is exactly the thing they were not doing.
+  const streak = streakFrom(submitted, profile.timezone);
+  const longestStreak = Math.max(profile.longest_streak, streak);
+
+  await persistStreak(profile, streak, longestStreak);
+
   return {
     attempts,
+    submitted,
     levelsDone,
     stats: {
-      streak: profile.streak,
-      longestStreak: profile.longest_streak,
+      streak,
+      longestStreak,
       points: profile.total_points,
       estimatedIq: estimateIq(profile.baseline_iq, attempts, levelsDone)
     }
   };
+}
+
+/**
+ * Consecutive days trained, counted back from today in the member's own
+ * calendar.
+ *
+ * Today not being done *yet* is not a broken streak — it is the middle of the
+ * day, and telling someone their streak is gone at 9am when they still have
+ * fifteen hours left would be both wrong and the worst possible nudge. Any
+ * earlier gap does break it.
+ */
+export function streakFrom(submitted: BoostAttempt[], timezone: string): number {
+  const done = new Set(submitted.map((a) => a.date_key));
+  const today = dateKeyIn(timezone);
+
+  let streak = 0;
+  for (let back = 0; back < 400; back += 1) {
+    const key = shiftDateKey(today, -back);
+    if (done.has(key)) streak += 1;
+    else if (back > 0) break;
+  }
+
+  return streak;
+}
+
+/**
+ * Writes the refreshed figures back, but only when they actually moved.
+ *
+ * The cached copy is what the leaderboard reads, so letting it drift would put
+ * a stale streak next to a live one on the same screen. Skipping the write when
+ * nothing changed keeps this off the hot path for the common case — a member
+ * loading a page twice in a row.
+ */
+async function persistStreak(
+  profile: BoostProfile,
+  streak: number,
+  longestStreak: number
+): Promise<void> {
+  if (profile.streak === streak && profile.longest_streak === longestStreak) return;
+
+  profile.streak = streak;
+  profile.longest_streak = longestStreak;
+
+  try {
+    await AppDataSource.getRepository(BoostProfile).update(
+      { customer_id: profile.customer_id },
+      { streak, longest_streak: longestStreak }
+    );
+  } catch {
+    // The figure returned above is already right; a failed cache write is not
+    // worth failing the page over.
+  }
 }
 
 /* ── leaderboard ──────────────────────────────────────────────────────────── */
@@ -197,15 +277,17 @@ export async function dashboard(profile: BoostProfile) {
   const timezone = profile.timezone;
   const today = dateKeyIn(timezone);
 
-  const [snapshot, progress, todaysAttempt, allSubmitted, board] = await Promise.all([
+  const [snapshot, progress, todaysAttempt, board, documents] = await Promise.all([
     memberSnapshot(profile),
     boostProgression.loadProgress(profile.customer_id),
     boostProgression.findTodaysAttempt(profile.customer_id, today),
-    attemptRepo().find({
-      where: { customer_id: profile.customer_id, status: 'submitted', is_practice: false }
-    }),
-    leaderboard(profile.customer_id, profile, 'week', 'total')
+    leaderboard(profile.customer_id, profile, 'week', 'total'),
+    documentsFor(profile.customer_id)
   ]);
+
+  // The snapshot already loaded these, and the week strip and the streak have
+  // to agree about which days count as trained.
+  const allSubmitted = snapshot.submitted;
 
   const games = await progressFor(profile.customer_id);
 
@@ -257,7 +339,9 @@ export async function dashboard(profile: BoostProfile) {
       me: board.rows.find((r) => r.me) ?? null,
       totalPlayers: board.rows.length
     },
-    games: Object.entries(games).map(([slug, rec]) => ({ slug, ...rec }))
+    games: Object.entries(games).map(([slug, rec]) => ({ slug, ...rec })),
+    // What they bought through the funnel. Empty when nothing has settled.
+    documents
   };
 }
 

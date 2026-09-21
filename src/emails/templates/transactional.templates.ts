@@ -627,10 +627,269 @@ const passwordResetTemplate: EmailTemplate = {
   }
 };
 
+// ---------------------------------------------------------------------------
+// 4 & 5. Changing the email address
+//
+// Two messages, deliberately. The new address gets a link because it has to
+// prove it is reachable before the account moves to it; the old address gets a
+// warning because it is the only party who can tell us the change was not
+// theirs. Sending only the first would make an account takeover silent.
+// ---------------------------------------------------------------------------
+
+interface EmailChangeCopy {
+  subject: string;
+  preview: string;
+  mastheadTag: string;
+  eyebrow: string;
+  headline: string;
+  lede: string;
+  fromLabel: string;
+  toLabel: string;
+  ctaTitle: string;
+  ctaLabel: string;
+  ctaNote: string;
+  ignoreLead: string;
+  ignoreBody: string;
+  footnote: string;
+}
+
+const EMAIL_CONFIRM_COPY: Record<EmailLanguage, EmailChangeCopy> = {
+  ja: {
+    subject: 'メールアドレス変更の確認',
+    preview: 'このアドレスで受信できることをご確認ください。確認するまで変更は反映されません。',
+    mastheadTag: 'アカウント',
+    eyebrow: 'メールアドレスの変更',
+    headline: '新しいメールアドレスの確認',
+    lede: '{{program_name}}のログイン用メールアドレスを、このアドレスへ変更するリクエストを受け付けました。下のボタンからご確認ください。',
+    fromLabel: '現在のアドレス',
+    toLabel: '新しいアドレス',
+    ctaTitle: 'このアドレスを確認する',
+    ctaLabel: 'メールアドレスを確認',
+    ctaNote: 'このリンクの有効期限は{{confirm_expires_hours}}時間です。',
+    ignoreLead: '心当たりがない場合は、このメールを破棄してください。',
+    ignoreBody: '確認されるまで、アカウントのメールアドレスは変更されません。',
+    footnote: '確認後は、新しいアドレスでログインしてください。'
+  },
+  en: {
+    subject: 'Confirm your new email address',
+    preview: 'Confirm you can receive mail here. Nothing changes until you do.',
+    mastheadTag: 'Account',
+    eyebrow: 'Email change',
+    headline: 'Confirm your new address',
+    lede: 'We received a request to move your {{program_name}} sign-in to this address. Confirm it with the button below.',
+    fromLabel: 'Current address',
+    toLabel: 'New address',
+    ctaTitle: 'Confirm this address',
+    ctaLabel: 'Confirm email address',
+    ctaNote: 'This link is valid for {{confirm_expires_hours}} hour(s).',
+    ignoreLead: 'If you did not ask for this, you can ignore this email.',
+    ignoreBody: 'Your account address will not change unless this link is followed.',
+    footnote: 'After confirming, sign in with the new address.'
+  }
+};
+
+/** The two addresses side by side, so the reader can check the new one for typos. */
+function addressPanel(
+  copy: { fromLabel: string; toLabel: string },
+  ctx: EmailTemplateContext
+): string {
+  const row = (label: string, value: string, strong: boolean) =>
+    '<tr><td style="padding:12px 16px;">' +
+    '<p style="margin:0 0 2px 0; font-size:10px; line-height:16px; letter-spacing:1.2px; text-transform:uppercase; color:#7d8797;">' +
+    escapeHtml(label) +
+    '</p>' +
+    '<p style="margin:0; font-size:14px; line-height:22px; font-weight:' +
+    (strong ? '700' : '400') +
+    '; color:' +
+    (strong ? '#12294a' : '#5a6779') +
+    '; word-break:break-all;">' +
+    escapeHtml(value) +
+    '</p></td></tr>';
+
+  return (
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#ffffff; border:1px solid rgba(18,41,74,0.12); border-radius:10px;">' +
+    row(copy.fromLabel, ctx.old_email ?? '', false) +
+    row(copy.toLabel, ctx.new_email ?? '', true) +
+    '</table>'
+  );
+}
+
+/**
+ * Sent to the **new** address only.
+ *
+ * Carries the single-use link that completes the change. Nothing on the account
+ * moves until it is followed, which is what stops a mistyped address from
+ * locking a paying member out of what they bought.
+ */
+const emailChangeConfirmTemplate: EmailTemplate = {
+  id: 'transactional_email_change_confirm',
+  name: 'Email change — confirm the new address',
+  description:
+    'Sent to the new address when a member asks to change their sign-in email. Carries a single-use, expiring confirmation link.',
+  category: 'transactional',
+  params: [
+    'first_name',
+    'honorific_name',
+    'new_email',
+    'old_email',
+    'confirm_url',
+    'confirm_expires_hours',
+    'program_name',
+    'site_url'
+  ],
+  subject: { ja: EMAIL_CONFIRM_COPY.ja.subject, en: EMAIL_CONFIRM_COPY.en.subject },
+  render(ctx: EmailTemplateContext): string {
+    const language = ctx.language;
+    const copy = EMAIL_CONFIRM_COPY[language] ?? EMAIL_CONFIRM_COPY.ja;
+    const fill = (text: string) =>
+      interpolate(text, {
+        program_name: ctx.program_name,
+        confirm_expires_hours: ctx.confirm_expires_hours
+      } as Partial<EmailTemplateContext>);
+
+    return renderLayout({
+      language,
+      mastheadTag: copy.mastheadTag,
+      previewText: copy.preview,
+      eyebrow: copy.eyebrow,
+      headline: copy.headline,
+      body: paragraph(greeting(language, ctx.first_name)) + paragraph(fill(copy.lede)),
+      sections: [
+        { html: panel(addressPanel(copy, ctx), 'blue'), gap: 26 },
+        {
+          html: ctaCard(language, {
+            title: copy.ctaTitle,
+            label: copy.ctaLabel,
+            url: ctx.confirm_url ?? ctx.site_url,
+            note: fill(copy.ctaNote)
+          }),
+          gap: 26
+        },
+        {
+          html: ruleNote(
+            language,
+            '<strong style="color:' +
+              INK +
+              ';">' +
+              escapeHtml(copy.ignoreLead) +
+              '</strong> ' +
+              escapeHtml(copy.ignoreBody)
+          ),
+          gap: 26
+        }
+      ],
+      footnote: copy.footnote,
+      recipientEmail: ctx.new_email ?? ctx.email,
+      siteUrl: ctx.site_url
+    });
+  }
+};
+
+interface EmailNoticeCopy {
+  subject: string;
+  preview: string;
+  mastheadTag: string;
+  eyebrow: string;
+  headline: string;
+  lede: string;
+  fromLabel: string;
+  toLabel: string;
+  alertLead: string;
+  alertBody: string;
+  footnote: string;
+}
+
+const EMAIL_NOTICE_COPY: Record<EmailLanguage, EmailNoticeCopy> = {
+  ja: {
+    subject: '【重要】メールアドレス変更のリクエストを受け付けました',
+    preview: 'アカウントのメールアドレス変更がリクエストされました。心当たりがない場合はご連絡ください。',
+    mastheadTag: 'セキュリティ',
+    eyebrow: 'セキュリティのお知らせ',
+    headline: 'メールアドレスの変更がリクエストされました',
+    lede: '{{program_name}}のアカウントについて、ログイン用メールアドレスの変更リクエストを受け付けました。新しいアドレスで確認が完了するまで、変更は反映されません。',
+    fromLabel: '現在のアドレス',
+    toLabel: 'リクエストされたアドレス',
+    alertLead: '心当たりがない場合は、すぐにご連絡ください。',
+    alertBody:
+      'パスワードの変更と、アカウント保護のご案内をいたします。確認が完了するまで変更は反映されません。',
+    footnote: 'このお知らせは、変更前のアドレスにお送りしています。'
+  },
+  en: {
+    subject: 'Security notice: a change to your email address was requested',
+    preview: 'Someone asked to move your account to a different address. If that was not you, tell us.',
+    mastheadTag: 'Security',
+    eyebrow: 'Security notice',
+    headline: 'A change to your email address was requested',
+    lede: 'We received a request to move your {{program_name}} sign-in to a different address. It will only take effect once that address is confirmed.',
+    fromLabel: 'Current address',
+    toLabel: 'Requested address',
+    alertLead: 'If this was not you, contact us immediately.',
+    alertBody:
+      'Change your password and we will help secure the account. Nothing moves until the new address is confirmed.',
+    footnote: 'This notice was sent to the address currently on the account.'
+  }
+};
+
+/**
+ * Sent to the **old** address only.
+ *
+ * The old address is the only party who can tell us the change was not theirs,
+ * so it is told regardless — without this, someone with a live session could
+ * move the account quietly and the owner would find out when they could no
+ * longer sign in.
+ */
+const emailChangeNoticeTemplate: EmailTemplate = {
+  id: 'transactional_email_change_notice',
+  name: 'Email change — notice to the old address',
+  description:
+    'Sent to the current address whenever an email change is requested, so a takeover attempt is visible to the real owner. Carries no link.',
+  category: 'transactional',
+  params: ['first_name', 'honorific_name', 'new_email', 'old_email', 'program_name', 'site_url'],
+  subject: { ja: EMAIL_NOTICE_COPY.ja.subject, en: EMAIL_NOTICE_COPY.en.subject },
+  render(ctx: EmailTemplateContext): string {
+    const language = ctx.language;
+    const copy = EMAIL_NOTICE_COPY[language] ?? EMAIL_NOTICE_COPY.ja;
+    const fill = (text: string) =>
+      interpolate(text, { program_name: ctx.program_name } as Partial<EmailTemplateContext>);
+
+    return renderLayout({
+      language,
+      mastheadTag: copy.mastheadTag,
+      previewText: copy.preview,
+      eyebrow: copy.eyebrow,
+      headline: copy.headline,
+      body: paragraph(greeting(language, ctx.first_name)) + paragraph(fill(copy.lede)),
+      sections: [
+        { html: panel(addressPanel(copy, ctx)), gap: 26 },
+        {
+          // No button anywhere in this message. A security notice that asks the
+          // reader to click something teaches exactly the habit phishing relies
+          // on — if they need to act, they come to the site themselves.
+          html: ruleNote(
+            language,
+            '<strong style="color:' +
+              INK +
+              ';">' +
+              escapeHtml(copy.alertLead) +
+              '</strong> ' +
+              escapeHtml(copy.alertBody)
+          ),
+          gap: 26
+        }
+      ],
+      footnote: copy.footnote,
+      recipientEmail: ctx.old_email ?? ctx.email,
+      siteUrl: ctx.site_url
+    });
+  }
+};
+
 export const transactionalTemplates: EmailTemplate[] = [
   welcomeTemplate,
   reportReadyTemplate,
-  passwordResetTemplate
+  passwordResetTemplate,
+  emailChangeConfirmTemplate,
+  emailChangeNoticeTemplate
 ];
 
 /** Unused by the designs above, but kept for `EmailAction`-based callers. */
