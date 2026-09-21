@@ -534,7 +534,7 @@ export class EmailMarketingService {
           login_email: input.to,
           login_password: 'SAMP-LE00-TEST',
           login_url: config.brainTraining.loginUrl || siteUrl,
-          program_name: config.brainTraining.name,
+          program_name: config.brainTraining.name[input.language],
           first_sale_report_url: `${siteUrl}/${input.language}/result?quiz_id=sample`,
           cross_sale_report_url: `${siteUrl}/${input.language}/result/report?quiz_id=sample`
         }

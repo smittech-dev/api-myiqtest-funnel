@@ -49,7 +49,7 @@ export interface EmailTemplateContext {
   login_password: string | null;
   /** Where those credentials are used. */
   login_url: string | null;
-  /** What they are signing in to, e.g. the brain training programme. */
+  /** What they are signing in to, e.g. the myIQ Cognitive Training Program. */
   program_name: string | null;
 
   // --- changing the email address ----------------------------------------

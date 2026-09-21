@@ -121,10 +121,16 @@ export const config = {
     maxAttempts: parseInt(process.env.TRANSACTIONAL_EMAIL_MAX_ATTEMPTS || '3', 10)
   },
 
-  // The brain training programme the subscription grants access to. Its sign-in
+  // The myIQ Cognitive Training Program the subscription grants access to. Its sign-in
   // page is what the welcome email's credentials are for.
   brainTraining: {
-    name: process.env.BRAIN_TRAINING_NAME || 'Brain Training Program',
+    // Keyed by the recipient's language. One string cannot serve both: the
+    // programme name opens the Japanese subject line too, and English words
+    // there are not a translation.
+    name: {
+      en: process.env.BRAIN_TRAINING_NAME || 'myIQ Cognitive Training Program',
+      ja: process.env.BRAIN_TRAINING_NAME_JA || 'myIQ認知トレーニングプログラム'
+    },
     // Falls back to the funnel origin so the welcome email always has somewhere
     // to point, even before the programme has its own URL.
     loginUrl: process.env.BRAIN_TRAINING_LOGIN_URL || ''
@@ -160,7 +166,7 @@ export const config = {
   },
 
   /**
-   * Boost My IQ — the members' area of the brain training programme.
+   * Boost My IQ — the members' area of the myIQ Cognitive Training Program.
    *
    * Its session secret is deliberately separate from the admin one. Sharing a
    * secret between the admin panel and the members' area would make an admin

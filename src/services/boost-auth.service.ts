@@ -17,7 +17,7 @@ import type { EmailLanguage } from '../emails/email.types.js';
 import type { UserDto } from '../types/boost.types.js';
 
 /**
- * Sign-in for the brain training programme.
+ * Sign-in for the myIQ Cognitive Training Program.
  *
  * There is no registration here and there never will be: an account exists
  * because the funnel sold a certificate and the welcome email issued a
@@ -161,7 +161,7 @@ export async function requestPasswordReset(rawEmail: unknown, ip: string | null)
       iq_score: quizResult?.iq_score ?? null,
       reset_url: resetUrl,
       reset_expires_hours: Math.max(1, Math.round(ttlMinutes / 60)),
-      program_name: config.brainTraining.name
+      program_name: config.brainTraining.name[language]
     }
   );
 

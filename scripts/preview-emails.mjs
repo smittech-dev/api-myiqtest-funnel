@@ -44,7 +44,8 @@ function contextFor(language, overrides = {}) {
       login_email: 'customer@example.com',
       login_password: 'K7MP-3QRT-9XYZ',
       login_url: APP + '/login',
-      program_name: language === 'ja' ? '脳力トレーニング' : 'Cognitive Training Program',
+      program_name:
+        language === 'ja' ? 'myIQ認知トレーニングプログラム' : 'myIQ Cognitive Training Program',
       reset_url: APP + '/reset-password?token=preview',
       reset_expires_hours: 1,
       new_email: 'new.address@example.com',

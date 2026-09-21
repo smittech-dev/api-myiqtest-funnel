@@ -51,7 +51,7 @@ export class EmailTransactionalService {
   // -------------------------------------------------------------------------
 
   /**
-   * Send the welcome email with the customer's brain training credentials.
+   * Send the welcome email with the customer's myIQ Cognitive Training Program credentials.
    *
    * Issues a real password the first time, hashes it with bcrypt into
    * `customers.password_hash`, and stamps `password_set_at`. The plaintext lives
@@ -100,7 +100,7 @@ export class EmailTransactionalService {
           login_email: customer.email,
           login_password: password,
           login_url: loginUrl,
-          program_name: config.brainTraining.name,
+          program_name: config.brainTraining.name[language],
           ...billing
         })
       };
@@ -349,7 +349,7 @@ export class EmailTransactionalService {
     customer.password_set_at = new Date();
     await this.customerRepository.save(customer);
 
-    logger.info(`Issued brain training credentials for customer ${customer.id}.`);
+    logger.info(`Issued myIQ Cognitive Training Program credentials for customer ${customer.id}.`);
     return password;
   }
 

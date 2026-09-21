@@ -66,10 +66,30 @@ export function formatMoney(amount: string | number, currency: string): string {
   }
 }
 
+/** What the programme is called to customers, in one place. */
+const PROGRAM_NAME = 'myIQ Cognitive Training Program';
+
+/**
+ * Stored plan name -> what the member is shown.
+ *
+ * The keys are lowercased plan names as they were written at the time of the
+ * sale, and the old ones stay here permanently. A subscription billed before
+ * the programme was renamed still carries `IQ Brain Training` in the database,
+ * and its receipts should show what the programme is called now — not the name
+ * it happened to have the day that row was inserted.
+ */
 const PLAN_LABELS: Record<string, string> = {
   premium: 'Premium',
   subscription: 'Premium',
-  'iq brain training': 'Brain Training'
+  // Current, in both languages the funnel sells in.
+  'myiq cognitive training program': PROGRAM_NAME,
+  'myiq認知トレーニングプログラム': PROGRAM_NAME,
+  // Legacy. `IQ Training Monthly` is the oldest and the one that matters most
+  // to catch: left as-is it tells a member their plan is monthly, when it has
+  // billed every 28 days since SUBSCRIPTION_INTERVAL_DAYS was introduced.
+  'iq brain training': PROGRAM_NAME,
+  'iq脳力トレーニング': PROGRAM_NAME,
+  'iq training monthly': PROGRAM_NAME
 };
 
 const planLabelFor = (planName: string | null): string => {
@@ -83,7 +103,7 @@ const INVOICE_LABELS: Record<string, string> = {
   cross_sale: 'Career and aptitude report',
   // Not "monthly": the cycle is 28 days, so a receipt saying monthly would not
   // match the dates on the customer's statement.
-  subscription: 'Brain training membership',
+  subscription: `${PROGRAM_NAME} membership`,
   refund: 'Refund'
 };
 

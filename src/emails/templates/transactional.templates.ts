@@ -81,11 +81,11 @@ interface WelcomeCopy {
 
 const WELCOME_COPY: Record<EmailLanguage, WelcomeCopy> = {
   ja: {
-    subject: '{{program_name}}のご利用を開始いただけます',
+    subject: '{{program_name}}へようこそ',
     preview: 'ログイン情報と、ご利用いただける内容のご案内です。',
     mastheadTag: 'トレーニング',
     eyebrow: 'ご利用開始',
-    headline: '{{program_name}}へようこそ',
+    headline: '{{program_name}}へようこそ。',
     lede: 'IQテストは、いまの推論力がどこにあるかを示すものでした。トレーニングは、それを動かすための部分です。1日数分の短いセットを、レポートで弱点とされた領域に向けて行います。ご利用は今日から始められます。',
     ctaTitle: '最初のセッションをご用意しました',
     ctaLabel: 'トレーニングを始める',
@@ -130,11 +130,11 @@ const WELCOME_COPY: Record<EmailLanguage, WelcomeCopy> = {
     footnote: 'このパスワードを再度表示することはできません。このメールを保存しておいてください。'
   },
   en: {
-    subject: 'Your {{program_name}} is active',
+    subject: 'Welcome - {{program_name}}',
     preview: 'Your sign-in details, what is included, and when it renews.',
     mastheadTag: 'Training program',
     eyebrow: 'Access is open',
-    headline: 'Welcome to {{program_name}}',
+    headline: 'Welcome to the {{program_name}}.',
     lede: 'Your assessment told you where your reasoning stands today. The training program is the part that moves it — short daily sets, aimed at the domains your own report marked as weakest. Full access starts now.',
     ctaTitle: 'Your first session is waiting',
     ctaLabel: 'Boost My IQ',
@@ -182,9 +182,9 @@ const WELCOME_COPY: Record<EmailLanguage, WelcomeCopy> = {
 
 const welcomeTemplate: EmailTemplate = {
   id: 'transactional_welcome',
-  name: 'Welcome — brain training login details',
+  name: 'Welcome — myIQ Cognitive Training Program login details',
   description:
-    "Sent once, when the first sale settles. Carries the customer's sign-in email and their one-time generated password for the brain training programme.",
+    "Sent once, when the first sale settles. Carries the customer's sign-in email and their one-time generated password for the myIQ Cognitive Training Program.",
   category: 'transactional',
   params: [
     'first_name',
@@ -264,7 +264,7 @@ const welcomeTemplate: EmailTemplate = {
       mastheadTag: copy.mastheadTag,
       previewText: copy.preview,
       eyebrow: copy.eyebrow,
-      headline: withName(language, fill(copy.headline), ctx.first_name),
+      headline: fill(copy.headline),
       body: paragraph(greeting(language, ctx.first_name)) + paragraph(fill(copy.lede)),
       sections: [
         {
@@ -568,9 +568,9 @@ const RESET_COPY: Record<EmailLanguage, ResetCopy> = {
  */
 const passwordResetTemplate: EmailTemplate = {
   id: 'transactional_password_reset',
-  name: 'Password reset — brain training',
+  name: 'Password reset — myIQ Cognitive Training Program',
   description:
-    'Sent when a member asks to reset their brain training password. Carries a single-use, expiring link — never a password.',
+    'Sent when a member asks to reset their myIQ Cognitive Training Program password. Carries a single-use, expiring link — never a password.',
   category: 'transactional',
   params: [
     'first_name',

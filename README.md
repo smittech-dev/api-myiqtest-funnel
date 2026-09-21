@@ -455,7 +455,7 @@ What is in it today:
 | Template id | Category | Sent when |
 |---|---|---|
 | `marketing_reminder_day1` … `day5` | marketing | The abandoned-checkout ladder (see below) |
-| `transactional_welcome` | transactional | The first sale settles — carries the brain training credentials |
+| `transactional_welcome` | transactional | The first sale settles — carries the myIQ Cognitive Training Program credentials |
 | `transactional_report_ready` | transactional | The customer finishes the funnel — links their reports |
 
 `category` is what separates them in the admin panel: the marketing step picker offers only
@@ -602,7 +602,8 @@ delivery of something bought — so they are triggered by the funnel itself rath
 |---|---|---|
 | `TRANSACTIONAL_EMAIL_ENABLED` | `false` | Master switch for both messages |
 | `TRANSACTIONAL_EMAIL_MAX_ATTEMPTS` | `3` | Provider calls per message before it is given up on |
-| `BRAIN_TRAINING_NAME` | `Brain Training Program` | What the welcome email calls the programme |
+| `BRAIN_TRAINING_NAME` | `myIQ Cognitive Training Program` | What the emails call the programme, for EN recipients |
+| `BRAIN_TRAINING_NAME_JA` | `myIQ認知トレーニングプログラム` | The same name for JA recipients |
 | `BRAIN_TRAINING_LOGIN_URL` | — | Where the credentials are used; falls back to `FRONTEND_URL` |
 
 #### 1. Welcome — when the first sale settles
@@ -612,7 +613,7 @@ both the confirm endpoint and the Stripe webhook settle through — so the email
 matter which of them arrives first. Gated on `transaction_type === 'first_sale'`: that method
 also settles cross-sale and subscription intents, and those are not a new account.
 
-It carries the customer's sign-in details for the brain training programme the subscription
+It carries the customer's sign-in details for the myIQ Cognitive Training Program the subscription
 unlocks:
 
 - A password is **generated**, not chosen — the funnel asks for a card, never a password, so the

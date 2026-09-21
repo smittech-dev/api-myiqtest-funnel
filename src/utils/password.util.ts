@@ -8,7 +8,7 @@ import { config } from '../config/env.config.js';
  * The funnel still seeds `customers.password_hash` with a throwaway sha256
  * value at quiz submission — that one is not a credential and nothing compares
  * against it. It is replaced with a bcrypt hash by the welcome email, which is
- * what issues the customer their brain training password. `password_set_at` is
+ * what issues the customer their myIQ Cognitive Training Program password. `password_set_at` is
  * the column that tells the two apart.
  */
 export class PasswordUtil {

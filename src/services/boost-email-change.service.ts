@@ -178,7 +178,7 @@ export async function requestEmailChange(
         honorific_name: honorific(language, firstName),
         new_email: newEmail,
         old_email: customer.email,
-        program_name: config.brainTraining.name
+        program_name: config.brainTraining.name[language]
       }
     );
 

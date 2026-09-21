@@ -3,7 +3,7 @@ import { config } from '../config/env.config.js';
 import { BoostError } from './boost-response.util.js';
 
 /**
- * Member session tokens for the brain training programme.
+ * Member session tokens for the myIQ Cognitive Training Program.
  *
  * Separate from `JwtUtil` (the admin panel) on purpose, and signed with a
  * different secret. One shared secret would make an admin token a valid member

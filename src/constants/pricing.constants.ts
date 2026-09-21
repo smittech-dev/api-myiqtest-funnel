@@ -69,7 +69,7 @@ export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
       price_id: config.subscription.priceIdJa,
       amount: 5495,
       currency: 'JPY',
-      title: 'IQ脳力トレーニング',
+      title: 'myIQ認知トレーニングプログラム',
       interval_days: SUBSCRIPTION_INTERVAL_DAYS,
       trial_days: SUBSCRIPTION_TRIAL_DAYS
     }
@@ -92,7 +92,7 @@ export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
       price_id: config.subscription.priceIdEn,
       amount: 29.99,
       currency: 'GBP',
-      title: 'IQ Brain Training',
+      title: 'myIQ Cognitive Training Program',
       interval_days: SUBSCRIPTION_INTERVAL_DAYS,
       trial_days: SUBSCRIPTION_TRIAL_DAYS
     }

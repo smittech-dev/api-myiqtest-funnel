@@ -520,7 +520,7 @@ export class PaymentService {
         stripe_subscription_id: subscription.id,
         stripe_customer_id: stripeCustomerId,
         status: subscription.status,
-        plan_name: item?.price?.nickname || 'IQ Brain Training',
+        plan_name: item?.price?.nickname || 'myIQ Cognitive Training Program',
         amount: amount.toString(),
         currency: (item?.price?.currency || 'jpy').toUpperCase(),
         cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
@@ -617,7 +617,7 @@ export class PaymentService {
     }
     await this.customerRepository.save(customer);
 
-    // The welcome email, with the customer's brain training credentials.
+    // The welcome email, with the customer's myIQ Cognitive Training Program credentials.
     //
     // Only for the first sale: this method settles cross-sale and subscription
     // intents too, and those are not a new account.
