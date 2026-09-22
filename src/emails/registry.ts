@@ -7,6 +7,7 @@ import type {
   RenderedEmail
 } from './email.types.js';
 import { interpolate } from './layout.js';
+import { contactTemplates } from './templates/contact.templates.js';
 import { marketingReminderTemplates } from './templates/marketing-reminder.templates.js';
 import { transactionalTemplates } from './templates/transactional.templates.js';
 
@@ -46,7 +47,12 @@ const TEMPLATES: EmailTemplate[] = [
   // The two messages a paying customer gets. Excluded from the marketing step
   // picker by their `category`, not by living somewhere else — everything the
   // application can send is listed here, once.
-  ...transactionalTemplates
+  ...transactionalTemplates,
+
+  // The contact-form notification. The only design here whose recipient is an
+  // operator rather than a customer, and listed for exactly that reason: "what
+  // can this application send" should have one answer.
+  ...contactTemplates
 ];
 
 /** Template id -> definition. Built once; the registry is immutable at runtime. */

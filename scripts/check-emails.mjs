@@ -58,6 +58,13 @@ function contextFor(language, overrides = {}) {
       subscription_price: '£29.99',
       interval_days: 28,
       trial_end: null,
+      contact_id: '42',
+      contact_name: language === 'ja' ? '山田 太郎' : 'Yuki Tanaka',
+      contact_email: 'writer@example.com',
+      contact_topic: 'Billing or refunds',
+      contact_message: 'I was charged twice for the same report. Could you check?',
+      contact_language: language,
+      contact_submitted_at: '2026-09-22T09:14:00.000Z',
       ...overrides
     }
   );
@@ -68,8 +75,20 @@ let rendered = 0;
 
 /* ── every template, both languages ───────────────────────────────────────── */
 
+/**
+ * Designs whose reader is an operator, not a customer.
+ *
+ * They render in English whatever language produced them — the visitor’s
+ * language travels as a field, because it is what the *reply* needs — so the
+ * per-language assertions below do not apply, and would only assert that an
+ * internal notice is not written in Japanese.
+ */
+const OPERATOR_ONLY = new Set(['contact_inquiry_admin']);
+
 for (const template of listTemplates()) {
   for (const language of LANGUAGES) {
+    if (language !== 'en' && OPERATOR_ONLY.has(template.id)) continue;
+
     const where = `${template.id} [${language}]`;
     const ctx = contextFor(language);
 

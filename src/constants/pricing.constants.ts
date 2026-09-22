@@ -5,7 +5,18 @@ export interface ProductPricing {
   amount: number;
   currency: 'JPY' | 'GBP';
   stripe_amount: number; // JPY: zero-decimal (2980), GBP: pence (1999)
+  /** What the customer is shown, in the language they bought in. */
   title: string;
+  /**
+   * What Stripe is told, always in English.
+   *
+   * Everything on the Stripe side — the PaymentIntent description, the row in
+   * the Dashboard, the export a finance team or an auditor reads — is read by
+   * people who do not read Japanese. `title` is the customer's language and
+   * belongs on the customer's screen; this is the operator's, and the two must
+   * not be the same field or the Japanese funnel fills Stripe with Japanese.
+   */
+  stripe_description: string;
 }
 
 export interface SubscriptionPricing {
@@ -20,7 +31,10 @@ export interface SubscriptionPricing {
   price_id: string;
   amount: number;
   currency: 'JPY' | 'GBP';
+  /** What the customer is shown, in the language they bought in. */
   title: string;
+  /** What Stripe is told, always in English. See `ProductPricing`. */
+  stripe_description: string;
   /**
    * Days between charges. 28, not a calendar month — so the renewal date walks
    * backwards through the month and "monthly" is the wrong word everywhere.
@@ -57,19 +71,22 @@ export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
       amount: 199,
       currency: 'JPY',
       stripe_amount: 199, // Zero-decimal in Stripe
-      title: '公式IQ認定証＋詳細診断レポート'
+      title: '公式IQ認定証＋詳細診断レポート',
+      stripe_description: 'Official IQ Certificate & Detailed Report'
     },
     cross_sale: {
       amount: 1990,
       currency: 'JPY',
       stripe_amount: 1990, // Zero-decimal in Stripe
-      title: 'プレミアム適職・キャリア分析レポート'
+      title: 'プレミアム適職・キャリア分析レポート',
+      stripe_description: 'Premium Career Aptitude & Personality Report'
     },
     subscription: {
       price_id: config.subscription.priceIdJa,
       amount: 5495,
       currency: 'JPY',
       title: 'myIQ認知トレーニングプログラム',
+      stripe_description: 'myIQ Cognitive Training Program',
       interval_days: SUBSCRIPTION_INTERVAL_DAYS,
       trial_days: SUBSCRIPTION_TRIAL_DAYS
     }
@@ -80,19 +97,22 @@ export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
       amount: 2.99,
       currency: 'GBP',
       stripe_amount: 299, // Pence in Stripe (2.99 * 100)
-      title: 'Official IQ Certificate & Detailed Report'
+      title: 'Official IQ Certificate & Detailed Report',
+      stripe_description: 'Official IQ Certificate & Detailed Report'
     },
     cross_sale: {
       amount: 7.99,
       currency: 'GBP',
       stripe_amount: 799, // Pence in Stripe (7.99 * 100)
-      title: 'Career Aptitude & Personality Report'
+      title: 'Career Aptitude & Personality Report',
+      stripe_description: 'Career Aptitude & Personality Report'
     },
     subscription: {
       price_id: config.subscription.priceIdEn,
       amount: 29.99,
       currency: 'GBP',
       title: 'myIQ Cognitive Training Program',
+      stripe_description: 'myIQ Cognitive Training Program',
       interval_days: SUBSCRIPTION_INTERVAL_DAYS,
       trial_days: SUBSCRIPTION_TRIAL_DAYS
     }

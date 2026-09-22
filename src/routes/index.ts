@@ -3,6 +3,7 @@ import quizRoutes from './quiz.routes.js';
 import pricingRoutes from './pricing.routes.js';
 import paymentRoutes from './payment.routes.js';
 import customerRoutes from './customer.routes.js';
+import contactRoutes from './contact.routes.js';
 import adminRoutes from './admin.routes.js';
 
 const router = Router();
@@ -17,6 +18,7 @@ router.use('/questions', quizRoutes);
 router.use('/price', pricingRoutes);
 router.use('/payment', paymentRoutes);
 router.use('/customer', customerRoutes);
+router.use('/contact', contactRoutes);
 
 // Admin Panel Endpoints (guarded by the admin JWT, not the funnel API key)
 router.use('/admin', adminRoutes);

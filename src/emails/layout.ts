@@ -650,22 +650,20 @@ interface LayoutOptions {
   brandName?: string;
 }
 
-const FOOTER_COPY: Record<EmailLanguage, { receiving: string; questions: string; support: string; privacy: string; terms: string; subscription: string }> = {
+const FOOTER_COPY: Record<EmailLanguage, { receiving: string; questions: string; support: string; privacy: string; terms: string }> = {
   en: {
     receiving: 'You are receiving this because you took the myIQ Test with the email address',
     questions: 'Questions? Write to',
     support: 'and a person will reply.',
     privacy: 'Privacy',
-    terms: 'Terms',
-    subscription: 'Subscription terms'
+    terms: 'Terms'
   },
   ja: {
     receiving: 'このメールは、次のメールアドレスでmyIQテストを受験された方にお送りしています：',
     questions: 'ご不明な点がございましたら、',
     support: 'までご連絡ください。担当者よりご返信いたします。',
     privacy: 'プライバシーポリシー',
-    terms: '利用規約',
-    subscription: 'サブスクリプション規約'
+    terms: '利用規約'
   }
 };
 
@@ -752,8 +750,6 @@ function renderFooter(language: EmailLanguage, opts: LayoutOptions): string {
       legalLink('privacy', copy.privacy) +
       '&nbsp;&middot;&nbsp;' +
       legalLink('terms', copy.terms) +
-      '&nbsp;&middot;&nbsp;' +
-      legalLink('subscription', copy.subscription) +
       '</p>',
     '</td></tr>',
     '</table>',

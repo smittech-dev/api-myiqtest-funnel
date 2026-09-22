@@ -22,7 +22,8 @@
     "test:boost:subscription": "node scripts/boost-subscription-check.mjs",
     "test:boost:profile": "node scripts/boost-profile-check.mjs",
     "test:boost:email": "node scripts/boost-email-change-check.mjs",
-    "backfill:boost": "tsx src/scripts/backfill-boost-profiles.ts"
+    "backfill:boost": "tsx src/scripts/backfill-boost-profiles.ts",
+    "resync:subscriptions": "tsx src/scripts/resync-subscriptions.ts"
   },
   "keywords": [
     "iq-funnel",

@@ -5,6 +5,36 @@
  */
 
 export const adminSchemas = {
+  ContactInquiry: {
+    type: 'object',
+    properties: {
+      id: { type: 'string', example: '42' },
+      name: { type: 'string', example: 'Taro Yamada' },
+      email: { type: 'string', example: 'taro@example.com' },
+      topic: {
+        type: 'string',
+        enum: ['billing', 'results', 'technical', 'press', 'other'],
+        example: 'billing'
+      },
+      message: { type: 'string' },
+      language: { type: 'string', enum: ['ja', 'en'], example: 'ja' },
+      status: { type: 'string', enum: ['new', 'read'], example: 'new' },
+      ip_address: { type: 'string', nullable: true, example: '203.0.113.7' },
+      notified_at: {
+        type: 'string',
+        format: 'date-time',
+        nullable: true,
+        description: 'When the admin notification left. Null means it never did.'
+      },
+      notify_error: {
+        type: 'string',
+        nullable: true,
+        description: 'Why the notification did not go out, when it did not.'
+      },
+      created_at: { type: 'string', format: 'date-time' }
+    }
+  },
+
   AdminUserProfile: {
     type: 'object',
     properties: {
@@ -913,9 +943,165 @@ const adminEmailMarketingPaths = {
   }
 };
 
+const adminContactPaths = {
+  '/admin/contact-inquiries': {
+    get: {
+      tags: ['Admin'],
+      summary: 'List contact inquiries',
+      description:
+        'The funnel contact form, as an inbox. Newest first. `search` matches the ' +
+        'name, the address or the message body, so a half-remembered phrase finds ' +
+        'the message it came from. `unread` is counted across the whole table and ' +
+        'not through the current filter, so the badge means the same thing on ' +
+        'every view.',
+      security: [{ AdminAuth: [] }],
+      parameters: [
+        { name: 'search', in: 'query', schema: { type: 'string' } },
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['all', 'new', 'read'] } },
+        {
+          name: 'topic',
+          in: 'query',
+          schema: {
+            type: 'string',
+            enum: ['all', 'billing', 'results', 'technical', 'press', 'other']
+          }
+        },
+        { name: 'from', in: 'query', schema: { type: 'string' } },
+        { name: 'to', in: 'query', schema: { type: 'string' } },
+        { name: 'page', in: 'query', schema: { type: 'integer', default: 1 } },
+        { name: 'page_size', in: 'query', schema: { type: 'integer', default: 20, maximum: 100 } }
+      ],
+      responses: {
+        200: {
+          description: 'One page of inquiries, plus the unfiltered unread count.',
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/components/schemas/SuccessEnvelope' },
+                  {
+                    type: 'object',
+                    properties: {
+                      data: {
+                        type: 'object',
+                        properties: {
+                          items: {
+                            type: 'array',
+                            items: { $ref: '#/components/schemas/ContactInquiry' }
+                          },
+                          total: { type: 'integer', example: 34 },
+                          page: { type: 'integer', example: 1 },
+                          page_size: { type: 'integer', example: 20 },
+                          total_pages: { type: 'integer', example: 2 },
+                          unread: { type: 'integer', example: 3 }
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        400: { $ref: '#/components/responses/ValidationError' },
+        401: { $ref: '#/components/responses/Unauthorized' }
+      }
+    }
+  },
+
+  '/admin/contact-inquiries/{id}': {
+    get: {
+      tags: ['Admin'],
+      summary: 'One contact inquiry',
+      security: [{ AdminAuth: [] }],
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'The inquiry.',
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/components/schemas/SuccessEnvelope' },
+                  {
+                    type: 'object',
+                    properties: { data: { $ref: '#/components/schemas/ContactInquiry' } }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        404: { $ref: '#/components/responses/NotFound' }
+      }
+    },
+    patch: {
+      tags: ['Admin'],
+      summary: 'Mark an inquiry read or unread',
+      description:
+        'The only mutable field. Two states rather than a workflow: anything ' +
+        'richer is a ticketing system, and this is an inbox.',
+      security: [{ AdminAuth: [] }],
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['status'],
+              properties: { status: { type: 'string', enum: ['new', 'read'] } }
+            }
+          }
+        }
+      },
+      responses: {
+        200: {
+          description: 'The inquiry, after the change.',
+          content: {
+            'application/json': {
+              schema: {
+                allOf: [
+                  { $ref: '#/components/schemas/SuccessEnvelope' },
+                  {
+                    type: 'object',
+                    properties: { data: { $ref: '#/components/schemas/ContactInquiry' } }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        400: { $ref: '#/components/responses/ValidationError' },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        404: { $ref: '#/components/responses/NotFound' }
+      }
+    },
+    delete: {
+      tags: ['Admin'],
+      summary: 'Delete an inquiry',
+      description: 'For clearing out spam. Permanent — there is no archive to restore from.',
+      security: [{ AdminAuth: [] }],
+      parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+      responses: {
+        200: {
+          description: 'Deleted.',
+          content: {
+            'application/json': { schema: { $ref: '#/components/schemas/SuccessEnvelope' } }
+          }
+        },
+        401: { $ref: '#/components/responses/Unauthorized' },
+        404: { $ref: '#/components/responses/NotFound' }
+      }
+    }
+  }
+};
+
 export const adminPaths = {
   ...adminAuthPaths,
   ...adminDataPaths,
   ...adminCurrencyPaths,
-  ...adminEmailMarketingPaths
+  ...adminEmailMarketingPaths,
+  ...adminContactPaths
 };

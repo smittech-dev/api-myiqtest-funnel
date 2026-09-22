@@ -59,6 +59,20 @@ export class CustomerQuizResultPaymentTransaction {
   @Column({ type: 'varchar', length: 255, nullable: true })
   stripe_charge_id!: string | null;
 
+  /**
+   * The Stripe Invoice a recurring charge came from. Null for the one-off sales,
+   * which are charged straight off a PaymentIntent and raise no invoice.
+   *
+   * This is what makes subscription logging idempotent. `invoice.paid` and
+   * `invoice.payment_succeeded` both fire for the same money, Stripe retries
+   * events, and a failed invoice that is collected later arrives again by
+   * design — the invoice id is the only identifier common to all of them, so it
+   * carries a unique index and every one of those paths lands on one row.
+   */
+  @Column({ type: 'varchar', length: 255, nullable: true, unique: true })
+  @Index('idx_transactions_stripe_invoice')
+  stripe_invoice_id!: string | null;
+
   @Column({ type: 'timestamptz', nullable: true })
   refunded_at!: Date | null;
 

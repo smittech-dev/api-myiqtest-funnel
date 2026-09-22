@@ -148,3 +148,17 @@ export interface AdminEmailTransportStatus {
   cron_expression: string;
   cron_timezone: string;
 }
+
+// --- contact inquiries -----------------------------------------------------
+
+export type AdminContactStatusFilter = 'all' | 'new' | 'read';
+
+export interface AdminContactListQuery extends DateRangeFilter {
+  /** Matched against name, email and message body. */
+  search?: string;
+  status?: AdminContactStatusFilter;
+  /** A topic key from the funnel's dropdown, or 'all'. */
+  topic?: string;
+  page: number;
+  page_size: number;
+}

@@ -92,7 +92,7 @@ new-funnel-backend/
 
 ---
 
-## 🗄️ Database Tables (11 Final Tables)
+## 🗄️ Database Tables (12 Final Tables)
 
 1. **`customers`**: Customer email, password hash for login, and Stripe customer ID.
 2. **`customer_subscriptions`**: Dedicated table managing customer recurring subscriptions, plan name, billing period, and status.
@@ -105,6 +105,7 @@ new-funnel-backend/
 9. **`email_marketing_settings`**: Singleton row of sequence-wide options (on/off, batch size, retry limit, age guard).
 10. **`email_marketing_steps`**: One row per rung of the discount ladder — delay, discount code, template.
 11. **`email_transactional_logs`**: Delivery record for the welcome and report-ready emails, deduped per purchase.
+12. **`contact_inquiries`**: One row per contact-form submission, with the outcome of the admin notification recorded on it.
 
 ---
 
@@ -160,10 +161,11 @@ npm start
 | 6 | `POST` | `/payment/cross-sale/confirm` | Charge the saved card for the upsell (no payment sheet) |
 | 7 | `POST` | `/payment/webhook` | Unified Stripe webhook (confirms first sale, cross sale, subscriptions) |
 | 8 | `PUT` | `/customer/update` | Update customer demographics (name, age, gender) |
-| 9 | `POST` | `/admin/auth/login` | Admin sign in — see [Admin Panel API](#admin-panel-api-admin) |
-| 10 | `GET` | `/admin/dashboard/stats` | Admin dashboard KPIs (date-range filtered) |
-| 11 | `GET` | `/admin/quiz-submissions` | Admin quiz submission list (search + filters) |
-| 12 | `GET` | `/admin/quiz-submissions/:id` | Admin quiz submission detail |
+| 9 | `POST` | `/contact` | Contact form: store the inquiry and notify `CONTACT_ADMIN_EMAIL` |
+| 10 | `POST` | `/admin/auth/login` | Admin sign in — see [Admin Panel API](#admin-panel-api-admin) |
+| 11 | `GET` | `/admin/dashboard/stats` | Admin dashboard KPIs (date-range filtered) |
+| 12 | `GET` | `/admin/quiz-submissions` | Admin quiz submission list (search + filters) |
+| 13 | `GET` | `/admin/quiz-submissions/:id` | Admin quiz submission detail |
 
 **First sale:** `create-payment-intent` returns a `client_secret` and records a `pending` transaction.
 The frontend confirms with Stripe.js, then immediately calls `first-sale/payments/confirm`, which
@@ -200,6 +202,10 @@ requiring the shared key there would mean shipping it to every visitor.
 | 11 | `GET` | `/admin/email-marketing/stats` | Bearer | Sent / failed / skipped counts, in total and per step |
 | 12 | `POST` | `/admin/email-marketing/run` | Bearer | Run the sequence immediately |
 | 13 | `POST` | `/admin/email-marketing/test-send` | Bearer | Send one template to an address with sample data |
+| 14 | `GET` | `/admin/contact-inquiries` | Bearer | Paginated contact form inbox, with an unfiltered unread count |
+| 15 | `GET` | `/admin/contact-inquiries/:id` | Bearer | One inquiry |
+| 16 | `PATCH` | `/admin/contact-inquiries/:id` | Bearer | Mark it read or unread |
+| 17 | `DELETE` | `/admin/contact-inquiries/:id` | Bearer | Delete it — for clearing out spam |
 
 **Admin users** live in the existing `users` table. `role` is always `admin` — there is no
 role management. **Email is the login credential** (`users.email` is the unique column).
@@ -384,6 +390,56 @@ Behaviour notes:
 - The local `customer_subscriptions` row is written immediately and refreshed by the
   `customer.subscription.*` webhooks through the same upsert, so the two never diverge.
 
+#### Recurring charges reach the ledger
+
+Every subscription charge — the first one when a trial converts, and each 28-day renewal — is
+written to `customer_quiz_result_payment_transactions` as a `subscription` row, keyed to the quiz
+attempt that made the sale.
+
+The work is done by the **`invoice.paid` / `invoice.payment_succeeded`** handler, not by
+`payment_intent.succeeded`. A recurring PaymentIntent is raised by Stripe's billing engine, so no
+transaction row exists for that event to settle: it can only log `No transaction found` and return.
+The invoice is the only event that carries the subscription, and therefore the only one that can
+open the row. `invoice.payment_failed` records the same charge as `failed`, so a membership that
+goes `past_due` has an explanation in our own data rather than only in Stripe.
+
+Idempotency rests on `stripe_invoice_id`, which is unique. Both paid events fire for the same money,
+Stripe retries deliveries, and an invoice that fails and is collected later arrives again by design —
+all of them land on one row. A row already `succeeded` is never walked back to `failed` by a
+redelivered old event. The opening invoice of a trial is for zero and is not recorded; nothing was
+charged.
+
+**Webhook events this endpoint must be subscribed to in the Stripe Dashboard:**
+`payment_intent.succeeded`, `payment_intent.payment_failed`, `charge.refunded`, `invoice.paid`,
+`invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.created`,
+`customer.subscription.updated`, `customer.subscription.deleted`.
+
+#### The billing period, across Stripe API versions
+
+`current_period_start` / `current_period_end` used to sit on the Subscription. From API version
+**2025-03-31 (Basil)** they sit on each subscription *item* and are gone from the Subscription.
+
+That split is invisible until a webhook arrives: our SDK calls are pinned to an older version and
+keep returning the old shape, but Stripe delivers webhook events in the **account's** default API
+version. The moment the account is upgraded, `subscription.current_period_end` on an incoming
+`customer.subscription.updated` is `undefined`, the period columns stop being written, and a
+subscription that converted from trial keeps showing the trial's dates for ever while it quietly
+renews at Stripe.
+
+`readSubscriptionPeriod` (`src/utils/stripe-period.util.ts`) reads both shapes. If neither carries a
+period the subscription is re-read through our pinned version, which is a shape we know. A paid
+invoice also re-syncs the subscription, since a renewal is exactly the moment the period moves and
+that event is guaranteed to fire when it does.
+
+#### Stripe is always addressed in English
+
+`ProductPricing.title` is what the customer is shown, in the language they bought in.
+`stripe_description` is what Stripe is told, and it is English in both funnels — it is what appears
+on the PaymentIntent, the Dashboard row and the finance export, all of which are read by people who
+do not read Japanese. The subscription carries an English `description` too, so its invoices match
+the one-off charges. Keep the two fields distinct: collapsing them back into one fills Stripe with
+Japanese again.
+
 ### Currency Rate Sync
 
 Exchange rates are refreshed from [exchangeratesapi.io](https://exchangeratesapi.io) on a cron schedule
@@ -494,6 +550,47 @@ templates are hosted, so nobody edits copy in this repo that has no effect.
 
 Designs are bilingual (`ja` / `en`) and table-based with inline styles — deliberately
 old-fashioned HTML, because that is what renders the same in twenty email clients.
+
+### Contact form
+
+The funnel's contact page posts to `POST /contact`. The request stores a row in
+`contact_inquiries` **first**, then emails every address in `CONTACT_ADMIN_EMAIL`.
+
+That order is the whole design. Mail is the part that fails — a bad token, a provider
+outage, a rate limit — and an inquiry that was only ever an email is an inquiry that is
+gone when the send fails. So the row is the record and the email is a notification about
+it: the endpoint answers `201` once the row exists, and the outcome of the send is written
+back onto that row as `notified_at` / `notify_error`. The admin panel shows a warning
+against any inquiry whose notification never left, which is the only way an operator who
+relies on their inbox would ever find out.
+
+```bash
+# one address, or several comma separated — each gets its own send, so one dead
+# address does not cost the others their copy
+CONTACT_ADMIN_EMAIL=support@myiq-test.com,ops@myiq-test.com
+```
+
+Leaving it empty notifies nobody. The inquiry is still stored and still appears in the
+panel, so an unset value loses a notification, never a message. Delivery also needs
+`ZEPTOMAIL_ENABLED=true`, like every other send.
+
+The notification is the one design in the [template master](#the-template-master) whose
+reader is an operator rather than a customer (`contact_inquiry_admin`). It renders in
+English whatever language the visitor used — their language travels as a field, because
+it is what the *reply* needs, not the notice.
+
+**Abuse.** The endpoint is public and unauthenticated, and every call both writes a row and
+sends mail, so it is rate limited to **5 submissions an hour per IP** — counted before
+validation, so a flood of malformed bodies costs the same as a flood of valid ones. The
+funnel form obtains a reCAPTCHA v3 token but **nothing verifies it server-side yet**; until
+that is wired up, the rate limit is what guards this endpoint.
+
+**The admin inbox.** `GET /admin/contact-inquiries` is the list behind the panel’s Contact
+page: newest first, filterable by status, topic and date, with one search box over the name,
+the address and the message body. Its `unread` count is deliberately taken across the whole
+table rather than through the current filter, so the badge means the same thing on every
+view. Status is two states — `new` and `read` — because anything richer is a ticketing
+system, and this is an inbox.
 
 ### Email marketing (abandoned checkout sequence)
 

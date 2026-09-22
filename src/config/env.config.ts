@@ -136,6 +136,24 @@ export const config = {
     loginUrl: process.env.BRAIN_TRAINING_LOGIN_URL || ''
   },
 
+  // The funnel's contact form. Submissions are stored either way; this is only
+  // about who gets told about them.
+  contact: {
+    /**
+     * Where the "new inquiry" notification goes. Several addresses may be given,
+     * comma separated, and each gets its own send — one failing address does not
+     * cost the others their copy.
+     *
+     * Empty means nobody is notified. The inquiry is still saved and still shows
+     * up in the admin panel, so an unset value loses a notification, never a
+     * message.
+     */
+    adminEmails: (process.env.CONTACT_ADMIN_EMAIL || '')
+      .split(',')
+      .map((address) => address.trim())
+      .filter(Boolean)
+  },
+
   emailMarketing: {
     // Master switch for the schedule. The sequence itself has a second switch
     // in the email_marketing_settings table that an admin can flip from the

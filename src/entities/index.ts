@@ -1,3 +1,4 @@
+export * from './ContactInquiry.entity.js';
 export * from './CurrencyRate.entity.js';
 export * from './Customer.entity.js';
 export * from './CustomerSubscription.entity.js';

@@ -35,6 +35,7 @@ export const swaggerSpec = {
     { name: 'Pricing', description: 'Funnel prices and discounts' },
     { name: 'Payment', description: 'Stripe payment intents and webhook' },
     { name: 'Customer', description: 'Customer demographic details' },
+    { name: 'Contact', description: 'The funnel contact form' },
     { name: 'Admin', description: 'Admin panel: sign in, dashboard KPIs, quiz submissions' }
   ],
   components: {
@@ -853,6 +854,78 @@ export const swaggerSpec = {
           400: { $ref: '#/components/responses/ValidationError' },
           401: { $ref: '#/components/responses/Unauthorized' },
           404: { $ref: '#/components/responses/NotFound' }
+        }
+      }
+    },
+
+    '/contact': {
+      post: {
+        tags: ['Contact'],
+        summary: 'Submit a contact inquiry',
+        description: [
+          'Stores the message and emails every address in `CONTACT_ADMIN_EMAIL`.',
+          '',
+          'The store is what the 201 promises; the notification is best effort. A',
+          'provider failure is recorded against the row and shown in the admin',
+          'panel, not reported to the visitor — their message is already safe.',
+          '',
+          'Rate limited to 5 submissions an hour per IP.'
+        ].join('\n'),
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['name', 'email', 'message'],
+                properties: {
+                  name: { type: 'string', maxLength: 255, example: '山田 太郎' },
+                  email: { type: 'string', format: 'email', example: 'taro@example.com' },
+                  topic: {
+                    type: 'string',
+                    enum: ['billing', 'results', 'technical', 'press', 'other'],
+                    default: 'other'
+                  },
+                  message: { type: 'string', minLength: 10, maxLength: 5000 },
+                  language: { type: 'string', enum: ['ja', 'en'], default: 'ja' }
+                }
+              },
+              example: {
+                name: '山田 太郎',
+                email: 'taro@example.com',
+                topic: 'billing',
+                message: '領収書の再発行をお願いできますか。',
+                language: 'ja'
+              }
+            }
+          }
+        },
+        responses: {
+          201: {
+            description: 'Message stored.',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/SuccessEnvelope' },
+                    {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'Your message has been received' },
+                        data: {
+                          type: 'object',
+                          properties: { id: { type: 'string', example: '42' } }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          400: { $ref: '#/components/responses/ValidationError' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          429: { description: 'Rate limit reached — 5 submissions an hour per IP.' }
         }
       }
     }

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { AdminAuthController } from '../controllers/admin-auth.controller.js';
 import { AdminDashboardController } from '../controllers/admin-dashboard.controller.js';
+import { AdminContactController } from '../controllers/admin-contact.controller.js';
 import { AdminCurrencyController } from '../controllers/admin-currency.controller.js';
 import { AdminEmailMarketingController } from '../controllers/admin-email-marketing.controller.js';
 import { AdminQuizController } from '../controllers/admin-quiz.controller.js';
@@ -41,6 +42,24 @@ const quizListSchema = z.object({
 
 const quizIdSchema = z.object({
   id: z.string().regex(/^\d+$/, 'Quiz id must be numeric')
+});
+
+const contactListSchema = z.object({
+  search: z.string().trim().max(255).optional(),
+  status: z.enum(['all', 'new', 'read']).optional(),
+  topic: z.enum(['all', 'billing', 'results', 'technical', 'press', 'other']).optional(),
+  from: dateFilter,
+  to: dateFilter,
+  page: z.coerce.number().int().min(1).default(1),
+  page_size: z.coerce.number().int().min(1).max(100).default(20)
+});
+
+const contactIdSchema = z.object({
+  id: z.string().regex(/^\d+$/, 'Inquiry id must be numeric')
+});
+
+const contactStatusSchema = z.object({
+  status: z.enum(['new', 'read'])
 });
 
 const emailMarketingLogSchema = z.object({
@@ -123,6 +142,33 @@ router.get(
 
 // Runs the same pass as the five-minute cron, on demand.
 router.post('/email-marketing/run', AdminEmailMarketingController.run);
+
+// ---------------------------------------------------------------------------
+// Contact inquiries — the funnel's contact form, as an inbox.
+// ---------------------------------------------------------------------------
+router.get(
+  '/contact-inquiries',
+  validateRequest({ query: contactListSchema }),
+  AdminContactController.list
+);
+
+router.get(
+  '/contact-inquiries/:id',
+  validateRequest({ params: contactIdSchema }),
+  AdminContactController.detail
+);
+
+router.patch(
+  '/contact-inquiries/:id',
+  validateRequest({ params: contactIdSchema, body: contactStatusSchema }),
+  AdminContactController.updateStatus
+);
+
+router.delete(
+  '/contact-inquiries/:id',
+  validateRequest({ params: contactIdSchema }),
+  AdminContactController.remove
+);
 
 router.post(
   '/email-marketing/test-send',

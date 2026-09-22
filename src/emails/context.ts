@@ -59,6 +59,13 @@ export function createEmailContext(
     iq_band: null,
     first_sale_report_url: null,
     cross_sale_report_url: null,
+    contact_id: null,
+    contact_name: null,
+    contact_email: null,
+    contact_topic: null,
+    contact_message: null,
+    contact_language: null,
+    contact_submitted_at: null,
     ...overrides
   };
 }

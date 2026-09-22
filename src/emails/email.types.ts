@@ -114,6 +114,25 @@ export interface EmailTemplateContext {
   first_sale_report_url: string | null;
   /** The cross-sale report. Null when the upsell was not purchased. */
   cross_sale_report_url: string | null;
+
+  // --- contact form (admin notification) ---------------------------------
+  // The one email in the registry whose recipient is us rather than a
+  // customer. Every value here was typed by a stranger into a public form, so
+  // the design escapes all of it — see the note in contact.templates.ts.
+
+  /** Row id in `contact_inquiries`, so the admin panel entry can be found. */
+  contact_id: string | null;
+  /** The name they gave. Not verified, not trusted. */
+  contact_name: string | null;
+  /** The address to reply to. */
+  contact_email: string | null;
+  /** The topic they picked, already turned into a readable label. */
+  contact_topic: string | null;
+  contact_message: string | null;
+  /** Which side of the funnel they wrote from — the language to reply in. */
+  contact_language: string | null;
+  /** When it arrived, already formatted. */
+  contact_submitted_at: string | null;
 }
 
 /** Every context key, as strings — the parameter list a template declares. */

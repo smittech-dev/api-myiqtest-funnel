@@ -12,6 +12,7 @@ import { getPricingByLanguage, applyDiscount, resolveDiscountCode } from '../con
 import { emailTransactionalService } from './email-transactional.service.js';
 import { logger } from '../utils/logger.util.js';
 import { resolveFunnelRedirect, FunnelRedirect } from '../utils/funnel-redirect.util.js';
+import { readSubscriptionPeriod } from '../utils/stripe-period.util.js';
 
 export interface SubscriptionOutcome {
   created: boolean;
@@ -19,6 +20,14 @@ export interface SubscriptionOutcome {
   status: string | null;
   /** Why no subscription was started, when created is false. */
   reason: string | null;
+}
+
+/** Postgres `unique_violation` — two settles inserting the same row at once. */
+const UNIQUE_VIOLATION = '23505';
+
+/** No subscription, and why. */
+function subscriptionSkipped(reason: string): SubscriptionOutcome {
+  return { created: false, subscription_id: null, status: null, reason };
 }
 
 export interface FirstSaleConfirmResult {
@@ -141,7 +150,10 @@ export class PaymentService {
         currency: product.currency.toLowerCase(),
         // Required for export transactions on India-registered Stripe accounts
         // (https://stripe.com/docs/india-exports) and useful on every dashboard row.
-        description: product.title,
+        //
+        // English, never `product.title`: the Japanese funnel's title is for the
+        // customer's screen, and Stripe's side is read by people who do not read it.
+        description: product.stripe_description,
         customer: stripeCustomerId,
         // Saves the card so the cross-sale can charge it without a payment sheet
         setup_future_usage: 'off_session',
@@ -318,7 +330,10 @@ export class PaymentService {
         amount: parseFloat(transaction.amount),
         currency: transaction.currency,
         redirect_url: await this.currentRedirect(quizResult.id),
-        subscription: await this.existingSubscriptionOutcome(quizResult)
+        subscription:
+          transaction.status === 'succeeded'
+            ? await this.ensureSubscriptionOutcome(quizResult, transaction)
+            : await this.existingSubscriptionOutcome(quizResult)
       };
     }
 
@@ -330,19 +345,12 @@ export class PaymentService {
       throw new AppError(`Could not read the payment from Stripe: ${err.message}`, 502);
     }
 
-    await this.settleTransactionFromIntent(transaction, paymentIntent);
-
-    // Remember the card on the quiz result so later charges (cross-sale, subscription)
-    // read it from our own database instead of calling Stripe again.
-    await this.storePaymentMethodOnQuiz(quizResult, paymentIntent);
-
-    // Start the recurring plan on the card just used. Deliberately best-effort:
-    // the customer has already been charged for the first sale, so a subscription
-    // problem must never fail this request or strand the funnel.
+    // Settling now owns the saved card and the recurring plan too, so the
+    // webhook reaches them as well — see `settleTransactionFromIntent`. The
+    // quiz result is handed over rather than re-read.
     const subscription =
-      paymentIntent.status === 'succeeded'
-        ? await this.startSubscription(quizResult, paymentIntent)
-        : { created: false, subscription_id: null, status: null, reason: 'first sale not paid' };
+      (await this.settleTransactionFromIntent(transaction, paymentIntent, quizResult)) ??
+      subscriptionSkipped('first sale not settled');
 
     return {
       status: paymentIntent.status,
@@ -355,6 +363,51 @@ export class PaymentService {
       redirect_url: await this.currentRedirect(quizResult.id),
       subscription
     };
+  }
+
+  /**
+   * The subscription for a first sale that is already settled.
+   *
+   * Normally just a lookup: the webhook, or an earlier confirm, created it.
+   * When there is no row the creation is retried here, because nothing else
+   * will. Stripe delivers `payment_intent.succeeded` once; if the subscription
+   * call inside it failed — a rate limit, a network blip, a price that was
+   * briefly archived — the customer is left charged with no plan and no second
+   * event to notice it. A returning browser is the cheapest repair we have.
+   */
+  private async ensureSubscriptionOutcome(
+    quizResult: CustomerQuizResult,
+    transaction: CustomerQuizResultPaymentTransaction
+  ): Promise<SubscriptionOutcome> {
+    const existing = await this.existingSubscriptionOutcome(quizResult);
+
+    // `enabled` is checked up front so a funnel running with subscriptions off
+    // does not pay for a Stripe round trip on every refresh of a settled sale.
+    if (existing.created || !config.subscription.enabled || !transaction.stripe_payment_intent_id) {
+      return existing;
+    }
+
+    logger.warn(
+      `Quiz ${quizResult.id}: first sale is settled but has no subscription — retrying creation`
+    );
+
+    let paymentIntent: Stripe.PaymentIntent;
+    try {
+      paymentIntent = await this.stripe.paymentIntents.retrieve(
+        transaction.stripe_payment_intent_id
+      );
+    } catch (err: any) {
+      logger.error(
+        `Could not re-read PaymentIntent ${transaction.stripe_payment_intent_id}: ${err.message}`
+      );
+      return existing;
+    }
+
+    if (paymentIntent.status !== 'succeeded') {
+      return existing;
+    }
+
+    return this.startSubscription(quizResult, paymentIntent);
   }
 
   /**
@@ -394,16 +447,9 @@ export class PaymentService {
     quizResult: CustomerQuizResult,
     paymentIntent: Stripe.PaymentIntent
   ): Promise<SubscriptionOutcome> {
-    const skip = (reason: string): SubscriptionOutcome => ({
-      created: false,
-      subscription_id: null,
-      status: null,
-      reason
-    });
-
     try {
       if (!config.subscription.enabled) {
-        return skip('subscriptions disabled (SUBSCRIPTION_ENABLED=false)');
+        return subscriptionSkipped('subscriptions disabled (SUBSCRIPTION_ENABLED=false)');
       }
 
       const plan = getPricingByLanguage(quizResult.language).subscription;
@@ -411,11 +457,11 @@ export class PaymentService {
         logger.warn(
           `Subscription skipped for quiz ${quizResult.id}: no Stripe Price id configured for language "${quizResult.language}"`
         );
-        return skip('no Stripe Price id configured for this language');
+        return subscriptionSkipped('no Stripe Price id configured for this language');
       }
 
       if (!quizResult.customer_id) {
-        return skip('quiz result has no customer record');
+        return subscriptionSkipped('quiz result has no customer record');
       }
 
       // One subscription per quiz attempt — a repeated confirm must not create another,
@@ -444,7 +490,7 @@ export class PaymentService {
           : paymentIntent.payment_method?.id;
 
       if (!customerId || !paymentMethodId) {
-        return skip('the first sale did not save a reusable card');
+        return subscriptionSkipped('the first sale did not save a reusable card');
       }
 
       // Make the saved card the default for future invoices
@@ -455,6 +501,9 @@ export class PaymentService {
       const subscription = await this.stripe.subscriptions.create({
         customer: customerId,
         items: [{ price: plan.price_id }],
+        // Rides onto every invoice Stripe raises for this subscription, so the
+        // renewals in the Dashboard read in English like the one-off charges do.
+        description: plan.stripe_description,
         default_payment_method: paymentMethodId,
         off_session: true,
         payment_behavior: 'allow_incomplete',
@@ -467,6 +516,18 @@ export class PaymentService {
           customer_email: quizResult.email,
           language: quizResult.language
         }
+      }, {
+        // The webhook and the confirm endpoint both settle a first sale, and
+        // they can arrive at the same instant — the row check above is a read,
+        // so both can pass it and both can get here. Without this key that is
+        // two subscriptions on one customer and a double charge every 28 days.
+        //
+        // Keyed on the quiz attempt, which is exactly the scope the plan is
+        // scoped to: one attempt, one subscription. Stripe replays the first
+        // response for 24 hours, far longer than the two paths can be apart,
+        // and expires long before a genuine retry of a *failed* creation would
+        // come back — so a real failure is still retryable.
+        idempotencyKey: `first-sale-subscription-${quizResult.id}`
       });
 
       await this.upsertSubscriptionRecord(subscription, quizResult.customer_id, quizResult.id);
@@ -483,7 +544,7 @@ export class PaymentService {
       };
     } catch (err: any) {
       logger.error(`Subscription creation failed for quiz ${quizResult.id}: ${err.message}`);
-      return skip(`subscription could not be created: ${err.message}`);
+      return subscriptionSkipped(`subscription could not be created: ${err.message}`);
     }
   }
 
@@ -510,8 +571,24 @@ export class PaymentService {
         : item.price.unit_amount / 100
       : 0;
 
-    const periodStart = (subscription as any).current_period_start;
-    const periodEnd = (subscription as any).current_period_end;
+    // Never read straight off the subscription: Stripe moved these onto the
+    // items in Basil, and webhooks arrive in the *account's* API version rather
+    // than the one our SDK is pinned to. See `readSubscriptionPeriod`.
+    let { start: periodStart, end: periodEnd } = readSubscriptionPeriod(subscription);
+
+    // Neither shape carried a period — an event trimmed by an API version we did
+    // not anticipate. Re-read the subscription through our own pinned version,
+    // which is a shape we know, rather than leaving the dates stale for ever.
+    if (!periodStart && !periodEnd) {
+      try {
+        const fresh = await this.stripe.subscriptions.retrieve(subscription.id);
+        ({ start: periodStart, end: periodEnd } = readSubscriptionPeriod(fresh));
+      } catch (err: any) {
+        logger.warn(
+          `Could not re-read subscription ${subscription.id} for its billing period: ${err.message}`
+        );
+      }
+    }
 
     if (!record) {
       record = this.subscriptionRepository.create({
@@ -524,8 +601,8 @@ export class PaymentService {
         amount: amount.toString(),
         currency: (item?.price?.currency || 'jpy').toUpperCase(),
         cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-        current_period_start: periodStart ? new Date(periodStart * 1000) : null,
-        current_period_end: periodEnd ? new Date(periodEnd * 1000) : null
+        current_period_start: periodStart,
+        current_period_end: periodEnd
       });
     } else {
       record.status = subscription.status;
@@ -534,8 +611,11 @@ export class PaymentService {
       // thing that distinguishes "cancelling on the 18th" from "renewing on the
       // 18th", so it has to ride along with the status it qualifies.
       record.cancel_at_period_end = Boolean(subscription.cancel_at_period_end);
-      if (periodStart) record.current_period_start = new Date(periodStart * 1000);
-      if (periodEnd) record.current_period_end = new Date(periodEnd * 1000);
+      // The whole point of this method for a renewal or a trial conversion: the
+      // period has moved on, and these two columns are what the members' area
+      // and the admin read to say when the next charge lands.
+      if (periodStart) record.current_period_start = periodStart;
+      if (periodEnd) record.current_period_end = periodEnd;
       // Backfill the quiz link for rows written before the reference existed
       if (!record.customer_quiz_result_id && quizResultId) {
         record.customer_quiz_result_id = quizResultId;
@@ -550,7 +630,22 @@ export class PaymentService {
       record.card_exp_year = null;
     }
 
-    await this.subscriptionRepository.save(record);
+    try {
+      await this.subscriptionRepository.save(record);
+    } catch (err: any) {
+      // The other settle path inserted this same subscription between our read
+      // above and this write. Both were handed the same Stripe subscription by
+      // the idempotency key on `subscriptions.create`, so the row that won the
+      // race is the row we were about to write — adopt it instead of failing,
+      // which would log a subscription error for a subscription that exists.
+      const code = err?.code ?? err?.driverError?.code;
+      if (code !== UNIQUE_VIOLATION) {
+        throw err;
+      }
+      logger.info(
+        `Subscription ${subscription.id} was written concurrently — keeping the row already stored`
+      );
+    }
   }
 
   /**
@@ -566,18 +661,24 @@ export class PaymentService {
   }
 
   /**
-   * Map a PaymentIntent status onto a stored transaction and activate the customer
-   * on success. Shared by the confirm endpoints and the webhook so both settle
-   * identically no matter which arrives first.
+   * Map a PaymentIntent status onto a stored transaction, activate the customer,
+   * and — for a first sale — save the card and start the recurring plan.
    *
-   * Also the single place the welcome email is triggered from — precisely
-   * because both paths run through here, and the email must be sent once no
-   * matter which of them wins the race.
+   * Everything a paid first sale must produce lives here rather than in the
+   * confirm endpoint, because the webhook is the only path Stripe guarantees.
+   * A customer who pays through a bank app and never comes back to the tab, or
+   * who closes it the moment the sheet succeeds, still gets their subscription.
+   * Both paths run through here and every step is idempotent, so whichever
+   * lands first does the work and the other is a no-op.
+   *
+   * Returns the subscription outcome for a first sale, so the confirm endpoint
+   * can report it without repeating the work; null for anything else.
    */
   private async settleTransactionFromIntent(
     transaction: CustomerQuizResultPaymentTransaction,
-    paymentIntent: Stripe.PaymentIntent
-  ): Promise<void> {
+    paymentIntent: Stripe.PaymentIntent,
+    known?: CustomerQuizResult
+  ): Promise<SubscriptionOutcome | null> {
     switch (paymentIntent.status) {
       case 'succeeded':
         transaction.status = 'succeeded';
@@ -597,8 +698,24 @@ export class PaymentService {
 
     await this.transactionRepository.save(transaction);
 
-    if (paymentIntent.status !== 'succeeded' || !transaction.customer_id) {
-      return;
+    // Only the first sale opens an account and a plan; this method settles the
+    // cross-sale and subscription intents too, and those are neither.
+    const isFirstSale = transaction.transaction_type === 'first_sale';
+    const quizResult = isFirstSale ? await this.quizResultFor(transaction, known) : null;
+
+    // Worth storing before the payment settles as well as after: an intent that
+    // is still waiting on 3-D Secure already carries a card, and the cross-sale
+    // reads it from our own database rather than calling Stripe again.
+    if (quizResult) {
+      await this.storePaymentMethodOnQuiz(quizResult, paymentIntent);
+    }
+
+    if (paymentIntent.status !== 'succeeded') {
+      return isFirstSale ? subscriptionSkipped('first sale not paid') : null;
+    }
+
+    if (!transaction.customer_id) {
+      return isFirstSale ? subscriptionSkipped('transaction has no customer record') : null;
     }
 
     // Activate the account. The welcome email below issues its password, so
@@ -608,7 +725,7 @@ export class PaymentService {
     });
 
     if (!customer) {
-      return;
+      return isFirstSale ? subscriptionSkipped('customer record not found') : null;
     }
 
     customer.status = 'active';
@@ -617,10 +734,29 @@ export class PaymentService {
     }
     await this.customerRepository.save(customer);
 
-    // The welcome email, with the customer's myIQ Cognitive Training Program credentials.
+    if (!isFirstSale) {
+      return null;
+    }
+
+    // Start the recurring plan on the card just used, and await it, unlike the
+    // email below. Two Stripe calls cost a fraction of a second, and a webhook
+    // that does not wait for them cannot be the path the subscription is
+    // guaranteed by, which is the whole reason this moved here.
     //
-    // Only for the first sale: this method settles cross-sale and subscription
-    // intents too, and those are not a new account.
+    // It also has to finish before the welcome email is dispatched: that email
+    // renders its "your free trial is active" panel from the row written here,
+    // and a customer told nothing about a trial they do have will read the
+    // first charge as a mistake.
+    //
+    // Still best-effort. The money has already moved, so a subscription problem
+    // is logged and reported, never thrown — it must not fail the confirm
+    // response, and it must not hand the webhook a non-2xx, which would have
+    // Stripe redeliver the event and settle it all over again.
+    const subscription = quizResult
+      ? await this.startSubscription(quizResult, paymentIntent)
+      : subscriptionSkipped('transaction has no quiz result');
+
+    // The welcome email, with the customer's myIQ Cognitive Training Program credentials.
     //
     // Deliberately not awaited. The customer's money has already moved, and a
     // slow or unhappy email provider must not delay a confirm response or push
@@ -628,11 +764,33 @@ export class PaymentService {
     // event and settle it all over again. The service claims a dedup row before
     // it sends, so the retry that this protects against could not double-send
     // anyway, and every failure inside it is caught and logged.
-    if (transaction.transaction_type === 'first_sale') {
-      void emailTransactionalService
-        .sendWelcome(transaction.customer_quiz_result_id)
-        .catch((err) => logger.error(`Welcome email dispatch failed: ${err?.message ?? err}`));
+    void emailTransactionalService
+      .sendWelcome(transaction.customer_quiz_result_id)
+      .catch((err) => logger.error(`Welcome email dispatch failed: ${err?.message ?? err}`));
+
+    return subscription;
+  }
+
+  /**
+   * The quiz attempt a transaction belongs to, reusing the one the caller has
+   * already loaded so the confirm endpoint does not read it a second time.
+   */
+  private async quizResultFor(
+    transaction: CustomerQuizResultPaymentTransaction,
+    known?: CustomerQuizResult
+  ): Promise<CustomerQuizResult | null> {
+    if (known) {
+      return known;
     }
+
+    if (!transaction.customer_quiz_result_id) {
+      return null;
+    }
+
+    return this.quizResultRepository.findOne({
+      where: { id: transaction.customer_quiz_result_id },
+      relations: ['customer']
+    });
   }
 
   /**
@@ -700,7 +858,8 @@ export class PaymentService {
       paymentIntent = await this.stripe.paymentIntents.create({
         amount: product.stripe_amount,
         currency: product.currency.toLowerCase(),
-        description: product.title,
+        // English on Stripe, in every language we sell in — see the first sale.
+        description: product.stripe_description,
         customer: customerId,
         payment_method: paymentMethodId,
         // Merchant-initiated: the customer is not completing a payment sheet
@@ -1014,6 +1173,23 @@ export class PaymentService {
         break;
       }
 
+      // Every renewal, and the first real charge when a trial converts, arrives
+      // here. `payment_intent.succeeded` fires for the same money, but it carries
+      // no subscription and no quiz reference, so it cannot open the row — the
+      // invoice is the only event that can, and it is what the ledger is built on.
+      case 'invoice.paid':
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as Stripe.Invoice;
+        await this.handleInvoicePaid(invoice);
+        break;
+      }
+
+      case 'invoice.payment_failed': {
+        const invoice = event.data.object as Stripe.Invoice;
+        await this.handleInvoicePaymentFailed(invoice);
+        break;
+      }
+
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const subscription = event.data.object as Stripe.Subscription;
@@ -1049,7 +1225,17 @@ export class PaymentService {
 
     // Identical to what the confirm endpoints do, and idempotent, so a webhook that
     // arrives after the frontend already confirmed simply re-applies the same state.
-    await this.settleTransactionFromIntent(transaction, paymentIntent);
+    // This is also where the subscription is started for every customer whose
+    // browser never came back to confirm it.
+    const subscription = await this.settleTransactionFromIntent(transaction, paymentIntent);
+
+    // Loud on purpose: a paid first sale with no plan is lost revenue, and this
+    // log line is the only thing standing between that and silence.
+    if (subscription && !subscription.created) {
+      logger.error(
+        `PaymentIntent ${paymentIntent.id}: first sale settled without a subscription — ${subscription.reason}`
+      );
+    }
   }
 
   private async handlePaymentIntentFailed(paymentIntent: Stripe.PaymentIntent): Promise<void> {
@@ -1079,16 +1265,335 @@ export class PaymentService {
     }
   }
 
-  private async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
-    const stripeCustomerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
-    
-    // Find customer by stripe_customer_id or metadata
+  /**
+   * Bring one subscription fully back in step with Stripe: its status, its
+   * billing period, and every charge it has ever taken.
+   *
+   * For repairing rows that went stale while the invoice events were unhandled
+   * and the billing period was being read from a field Stripe had moved. Going
+   * forward the webhooks keep both current, so this is a one-off catch-up rather
+   * than something to run on a schedule.
+   *
+   * Idempotent: the period is simply overwritten with Stripe's answer, and each
+   * invoice lands on its own row keyed by invoice id.
+   */
+  async resyncSubscription(
+    stripeSubscriptionId: string
+  ): Promise<{ found: boolean; invoicesLogged: number }> {
+    const record = await this.syncSubscriptionFromStripe(stripeSubscriptionId);
+
+    if (!record) {
+      return { found: false, invoicesLogged: 0 };
+    }
+
+    let invoicesLogged = 0;
+
+    // `autoPagingEach` rather than one page: a subscription billing every 28 days
+    // passes Stripe's default page size inside a year.
+    try {
+      await this.stripe.invoices
+        .list({ subscription: stripeSubscriptionId, limit: 100 })
+        .autoPagingEach(async (invoice) => {
+          if (!invoice.id) return;
+
+          const amount = fromStripeAmount(invoice.amount_paid, invoice.currency);
+          if (amount <= 0) return;
+
+          const before = await this.transactionRepository.findOne({
+            where: { stripe_invoice_id: invoice.id }
+          });
+
+          await this.recordSubscriptionTransaction(record, invoice, 'succeeded', amount);
+
+          if (!before) invoicesLogged += 1;
+        });
+    } catch (err: any) {
+      logger.warn(
+        `Could not list invoices for subscription ${stripeSubscriptionId}: ${err.message}`
+      );
+    }
+
+    return { found: true, invoicesLogged };
+  }
+
+  /**
+   * A subscription invoice was paid — the first charge after the trial, or a renewal.
+   *
+   * This is the one place recurring money becomes a row in
+   * `customer_quiz_result_payment_transactions`. Nothing else could do it:
+   * `payment_intent.succeeded` fires for the same charge, but its PaymentIntent
+   * was created by Stripe's billing engine, so no transaction row exists for it
+   * to settle and it can only log "no transaction found" and give up — which is
+   * exactly why every renewal was missing from the ledger.
+   *
+   * Also re-syncs the subscription itself. A renewal is precisely the moment the
+   * billing period moves, and this event is guaranteed to fire when it does, so
+   * the period is refreshed here as well as from `customer.subscription.updated`.
+   */
+  private async handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
+    // Stripe types this as always present, but it is absent on an upcoming
+    // invoice. Without the guard the idempotency lookup below would run with an
+    // undefined id, which TypeORM answers with an arbitrary existing row.
+    if (!invoice.id) {
+      return;
+    }
+
+    const subscriptionId = readInvoiceSubscriptionId(invoice);
+
+    if (!subscriptionId) {
+      // A one-off invoice, not a membership charge. The funnel does not raise any.
+      logger.info(`Invoice ${invoice.id}: not a subscription invoice, nothing to log`);
+      return;
+    }
+
+    // Bring the subscription (and its new period) up to date first, so the row
+    // this transaction hangs off is the right one even on the very first invoice,
+    // where `customer.subscription.created` may not have landed yet.
+    const record = await this.syncSubscriptionFromStripe(subscriptionId);
+
+    if (!record) {
+      logger.warn(
+        `Invoice ${invoice.id}: no local subscription for ${subscriptionId} — charge not logged`
+      );
+      return;
+    }
+
+    // The opening invoice of a trial is for zero. Nothing was charged, so there is
+    // no transaction to record; the real one arrives when the trial converts.
+    const amount = fromStripeAmount(invoice.amount_paid, invoice.currency);
+    if (amount <= 0) {
+      logger.info(`Invoice ${invoice.id}: zero amount (trial opening invoice), nothing to log`);
+      return;
+    }
+
+    await this.recordSubscriptionTransaction(record, invoice, 'succeeded', amount);
+  }
+
+  /**
+   * A subscription invoice could not be collected — an expired or declined card.
+   *
+   * Logged as a failed transaction rather than dropped: without the row, a
+   * membership that goes `past_due` has no explanation anywhere in our own data,
+   * and support has to open Stripe to answer "why did my access stop?".
+   */
+  private async handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+    // Stripe types this as always present, but it is absent on an upcoming
+    // invoice. Without the guard the idempotency lookup below would run with an
+    // undefined id, which TypeORM answers with an arbitrary existing row.
+    if (!invoice.id) {
+      return;
+    }
+
+    const subscriptionId = readInvoiceSubscriptionId(invoice);
+    if (!subscriptionId) {
+      return;
+    }
+
+    const record = await this.syncSubscriptionFromStripe(subscriptionId);
+    if (!record) {
+      logger.warn(
+        `Invoice ${invoice.id}: no local subscription for ${subscriptionId} — failure not logged`
+      );
+      return;
+    }
+
+    const amount = fromStripeAmount(invoice.amount_due, invoice.currency);
+    if (amount <= 0) {
+      return;
+    }
+
+    await this.recordSubscriptionTransaction(record, invoice, 'failed', amount);
+  }
+
+  /**
+   * Insert or update the `subscription` transaction for one invoice.
+   *
+   * Keyed on the invoice id, which is the only identifier every path shares:
+   * `invoice.paid` and `invoice.payment_succeeded` both fire for the same money,
+   * Stripe retries events, and an invoice that fails and is later collected
+   * arrives twice by design. All of those have to land on one row.
+   */
+  private async recordSubscriptionTransaction(
+    record: CustomerSubscription,
+    invoice: Stripe.Invoice,
+    status: 'succeeded' | 'failed',
+    amount: number
+  ): Promise<void> {
+    const quizResultId = await this.quizResultIdForSubscription(record);
+
+    if (!quizResultId) {
+      // `customer_quiz_result_id` is NOT NULL — the ledger is keyed to the quiz
+      // attempt that made the sale. A subscription with no attempt behind it is
+      // not something the funnel creates, so this is a data problem worth seeing
+      // rather than something to paper over with a placeholder row.
+      logger.error(
+        `Invoice ${invoice.id}: subscription ${record.stripe_subscription_id} has no quiz result — charge not logged`
+      );
+      return;
+    }
+
+    const currency = (invoice.currency || record.currency || 'jpy').toUpperCase();
+
+    let transaction = await this.transactionRepository.findOne({
+      where: { stripe_invoice_id: invoice.id }
+    });
+
+    if (!transaction) {
+      transaction = this.transactionRepository.create({
+        customer_quiz_result_id: quizResultId,
+        customer_id: record.customer_id,
+        transaction_type: 'subscription',
+        amount: amount.toString(),
+        currency,
+        amount_gbp: await currencyRateService.convertToGbp(amount, currency),
+        status,
+        stripe_invoice_id: invoice.id
+      });
+    } else {
+      // Never walk a succeeded row backwards: Stripe redelivers old events, and a
+      // late `payment_failed` for an invoice that has since been collected must
+      // not un-collect it in our ledger.
+      if (transaction.status === 'succeeded' && status === 'failed') {
+        return;
+      }
+      transaction.status = status;
+      transaction.amount = amount.toString();
+      transaction.currency = currency;
+      if (transaction.amount_gbp === null) {
+        transaction.amount_gbp = await currencyRateService.convertToGbp(amount, currency);
+      }
+    }
+
+    const paymentIntentId = readInvoicePaymentIntentId(invoice);
+    if (paymentIntentId) transaction.stripe_payment_intent_id = paymentIntentId;
+
+    const chargeId = readInvoiceChargeId(invoice);
+    if (chargeId) transaction.stripe_charge_id = chargeId;
+
+    await this.transactionRepository.save(transaction);
+
+    logger.info(
+      `Subscription charge logged: invoice ${invoice.id} (${status}) ${amount} ${currency} ` +
+        `for subscription ${record.stripe_subscription_id}`
+    );
+  }
+
+  /**
+   * The quiz attempt a subscription belongs to.
+   *
+   * The link is normally on the subscription row. Rows written before that
+   * reference existed fall back to the customer's newest attempt, and the link is
+   * backfilled so the lookup only happens once.
+   */
+  private async quizResultIdForSubscription(
+    record: CustomerSubscription
+  ): Promise<string | null> {
+    if (record.customer_quiz_result_id) {
+      return record.customer_quiz_result_id;
+    }
+
+    const quizResult = await this.quizResultRepository.findOne({
+      where: { customer_id: record.customer_id },
+      order: { id: 'DESC' }
+    });
+
+    if (!quizResult) {
+      return null;
+    }
+
+    record.customer_quiz_result_id = quizResult.id;
+    await this.subscriptionRepository.save(record);
+
+    return quizResult.id;
+  }
+
+  /**
+   * Re-read a subscription from Stripe and write it to our row, returning the row.
+   *
+   * Deliberately retrieves rather than trusting the invoice's expanded copy: the
+   * retrieve goes through our pinned API version, so the billing period comes back
+   * in the shape we expect no matter which version the webhook arrived in.
+   */
+  private async syncSubscriptionFromStripe(
+    subscriptionId: string
+  ): Promise<CustomerSubscription | null> {
+    let subscription: Stripe.Subscription | null = null;
+
+    try {
+      subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
+    } catch (err: any) {
+      logger.warn(`Could not read subscription ${subscriptionId} from Stripe: ${err.message}`);
+    }
+
+    if (subscription) {
+      const stripeCustomerId =
+        typeof subscription.customer === 'string'
+          ? subscription.customer
+          : subscription.customer.id;
+
+      const customerId = await this.resolveCustomerIdForSubscription(
+        subscription.id,
+        stripeCustomerId
+      );
+
+      if (customerId) {
+        await this.upsertSubscriptionRecord(
+          subscription,
+          customerId,
+          subscription.metadata?.quiz_result_id || null
+        );
+      }
+    }
+
+    return this.subscriptionRepository.findOne({
+      where: { stripe_subscription_id: subscriptionId }
+    });
+  }
+
+  /**
+   * Our customer id for a Stripe subscription.
+   *
+   * By the Stripe customer id first. Failing that, by a subscription row we
+   * already hold — a customer whose `stripe_customer_id` was never written, or was
+   * written against a different Stripe Customer, would otherwise have every one of
+   * their subscription events dropped and never see their period update again.
+   */
+  private async resolveCustomerIdForSubscription(
+    subscriptionId: string,
+    stripeCustomerId: string
+  ): Promise<string | null> {
     const customer = await this.customerRepository.findOne({
       where: { stripe_customer_id: stripeCustomerId }
     });
 
-    if (!customer) {
-      logger.warn(`Subscription ${subscription.id}: No customer found with stripe_customer_id ${stripeCustomerId}`);
+    if (customer) {
+      return customer.id;
+    }
+
+    const existing = await this.subscriptionRepository.findOne({
+      where: { stripe_subscription_id: subscriptionId }
+    });
+
+    if (existing) {
+      return existing.customer_id;
+    }
+
+    logger.warn(
+      `Subscription ${subscriptionId}: no customer found with stripe_customer_id ${stripeCustomerId}`
+    );
+    return null;
+  }
+
+  private async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
+    const stripeCustomerId =
+      typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
+
+    const customerId = await this.resolveCustomerIdForSubscription(
+      subscription.id,
+      stripeCustomerId
+    );
+
+    if (!customerId) {
       return;
     }
 
@@ -1096,7 +1601,7 @@ export class PaymentService {
     // created the subscription simply refreshes it instead of duplicating. The quiz
     // reference rides along in metadata for subscriptions we created ourselves.
     const quizResultId = subscription.metadata?.quiz_result_id || null;
-    await this.upsertSubscriptionRecord(subscription, customer.id, quizResultId);
+    await this.upsertSubscriptionRecord(subscription, customerId, quizResultId);
   }
 
   private async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
@@ -1111,6 +1616,63 @@ export class PaymentService {
       await this.subscriptionRepository.save(subRecord);
     }
   }
+}
+
+/* ── reading a Stripe Invoice across API versions ──────────────────────────────
+ *
+ * Webhooks are delivered in the Stripe *account's* default API version, not the
+ * one the SDK is pinned to, so an invoice can arrive in either shape and the
+ * code that reads it cannot assume which. Basil (2025-03-31) moved the
+ * subscription reference under `parent.subscription_details`, replaced
+ * `payment_intent` with a `payments` collection, and dropped `charge`
+ * altogether. Each reader below tries the modern location first, then the
+ * legacy one, so an account upgrade cannot silently stop the ledger.
+ */
+
+/** Zero-decimal currencies charge in whole units; everything else in hundredths. */
+const ZERO_DECIMAL_CURRENCIES = new Set(['jpy', 'krw', 'vnd', 'clp', 'isk']);
+
+function fromStripeAmount(smallestUnit: number | null | undefined, currency: string): number {
+  if (typeof smallestUnit !== 'number' || !Number.isFinite(smallestUnit)) {
+    return 0;
+  }
+  return ZERO_DECIMAL_CURRENCIES.has((currency || 'jpy').toLowerCase())
+    ? smallestUnit
+    : smallestUnit / 100;
+}
+
+const idOf = (value: unknown): string | null => {
+  if (typeof value === 'string') return value || null;
+  if (value && typeof value === 'object' && typeof (value as any).id === 'string') {
+    return (value as any).id;
+  }
+  return null;
+};
+
+function readInvoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  const raw = invoice as any;
+  return idOf(raw.parent?.subscription_details?.subscription) ?? idOf(raw.subscription);
+}
+
+function readInvoicePaymentIntentId(invoice: Stripe.Invoice): string | null {
+  const raw = invoice as any;
+
+  const direct = idOf(raw.payment_intent);
+  if (direct) return direct;
+
+  // Basil: one entry per collection attempt, newest last.
+  const payments: any[] = raw.payments?.data ?? [];
+  for (let i = payments.length - 1; i >= 0; i -= 1) {
+    const found = idOf(payments[i]?.payment?.payment_intent);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+function readInvoiceChargeId(invoice: Stripe.Invoice): string | null {
+  const raw = invoice as any;
+  return idOf(raw.charge) ?? idOf(raw.latest_charge);
 }
 
 export const paymentService = new PaymentService();

@@ -9,6 +9,7 @@ import { SUBSCRIPTION_INTERVAL_DAYS } from '../constants/pricing.constants.js';
 import { ms } from '../utils/boost-date.util.js';
 import { BoostError } from '../utils/boost-response.util.js';
 import { logger } from '../utils/logger.util.js';
+import { readSubscriptionPeriod } from '../utils/stripe-period.util.js';
 import type { SubscriptionDto } from '../types/boost.types.js';
 
 /** The same API version the funnel's payment service pins, so both see one Stripe. */
@@ -221,11 +222,15 @@ async function applyStripeState(
   record: CustomerSubscription,
   subscription: Stripe.Subscription
 ): Promise<CustomerSubscription> {
-  const periodEnd = (subscription as any).current_period_end;
+  // Read through the helper rather than off the subscription: Stripe moved the
+  // period onto the items in Basil, and this row is the one the subscription
+  // screen prints "renews on" from.
+  const { start: periodStart, end: periodEnd } = readSubscriptionPeriod(subscription);
 
   record.status = subscription.status;
   record.cancel_at_period_end = Boolean(subscription.cancel_at_period_end);
-  if (periodEnd) record.current_period_end = new Date(periodEnd * 1000);
+  if (periodStart) record.current_period_start = periodStart;
+  if (periodEnd) record.current_period_end = periodEnd;
 
   // When it actually ended, not when it was asked to end.
   //
