@@ -6,7 +6,7 @@ import {
   providerTemplateKey,
   renderTemplate
 } from '../emails/registry.js';
-import { externalApiLogService } from './external-api-log.service.js';
+import { externalApiLogService, EXTERNAL_API_SERVICE } from './external-api-log.service.js';
 import { logger } from '../utils/logger.util.js';
 
 /**
@@ -221,7 +221,7 @@ export class EmailService {
       const duration = Date.now() - startedAt;
 
       await externalApiLogService.log({
-        service_name: 'zeptomail',
+        service_name: EXTERNAL_API_SERVICE.ZEPTOMAIL,
         endpoint: url,
         method: 'POST',
         request_payload: this.redact(payload),
@@ -241,7 +241,7 @@ export class EmailService {
     const providerMessage = ok ? null : describeZeptoError(body, statusCode);
 
     await externalApiLogService.log({
-      service_name: 'zeptomail',
+      service_name: EXTERNAL_API_SERVICE.ZEPTOMAIL,
       endpoint: url,
       method: 'POST',
       status_code: statusCode ?? undefined,

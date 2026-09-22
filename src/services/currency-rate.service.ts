@@ -1,6 +1,11 @@
 import { AppDataSource } from '../config/database.config.js';
 import { CurrencyRate } from '../entities/CurrencyRate.entity.js';
 import { config } from '../config/env.config.js';
+import {
+  externalApiLogService,
+  redactUrl,
+  EXTERNAL_API_SERVICE
+} from './external-api-log.service.js';
 import { AppError } from '../utils/app-error.util.js';
 import { logger } from '../utils/logger.util.js';
 
@@ -235,17 +240,45 @@ export class CurrencyRateService {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), config.currency.requestTimeoutMs);
 
+    // `access_key` is a query parameter, so the stored endpoint must be the
+    // masked form — never `url` itself.
+    const endpoint = redactUrl(url);
+    const requestPayload = { base: config.currency.providerBase };
+    const startedAt = Date.now();
+
     let response: Response;
     try {
       response = await fetch(url, { signal: controller.signal });
     } catch (err: any) {
       const reason = err?.name === 'AbortError' ? 'request timed out' : err?.message;
+
+      await externalApiLogService.log({
+        service_name: EXTERNAL_API_SERVICE.EXCHANGE_RATES,
+        endpoint,
+        method: 'GET',
+        request_payload: requestPayload,
+        is_error: true,
+        error_message: `Provider unreachable: ${reason}`,
+        duration_ms: Date.now() - startedAt
+      });
+
       throw new AppError(`Exchange rate provider unreachable: ${reason}`, 502);
     } finally {
       clearTimeout(timeout);
     }
 
     if (!response.ok) {
+      await externalApiLogService.log({
+        service_name: EXTERNAL_API_SERVICE.EXCHANGE_RATES,
+        endpoint,
+        method: 'GET',
+        status_code: response.status,
+        request_payload: requestPayload,
+        is_error: true,
+        error_message: `Provider returned HTTP ${response.status} ${response.statusText}`,
+        duration_ms: Date.now() - startedAt
+      });
+
       throw new AppError(
         `Exchange rate provider returned HTTP ${response.status} ${response.statusText}`,
         502
@@ -255,9 +288,34 @@ export class CurrencyRateService {
     const payload = (await response.json()) as ExchangeRatesResponse;
 
     // The API answers 200 OK with `success: false` for quota/auth/plan errors
-    if (payload.success === false || !payload.rates) {
-      const info = payload.error?.info || payload.error?.type || 'unknown provider error';
-      throw new AppError(`Exchange rate provider error: ${info}`, 502);
+    const providerError =
+      payload.success === false || !payload.rates
+        ? payload.error?.info || payload.error?.type || 'unknown provider error'
+        : null;
+
+    await externalApiLogService.log({
+      service_name: EXTERNAL_API_SERVICE.EXCHANGE_RATES,
+      endpoint,
+      method: 'GET',
+      status_code: response.status,
+      request_payload: requestPayload,
+      // The rate table is ~170 currencies of noise on a good day; the counts and
+      // the base are what tells a sync apart, and a failure keeps its whole body.
+      response_payload: providerError
+        ? payload
+        : {
+            success: payload.success,
+            base: (payload as any).base ?? null,
+            timestamp: (payload as any).timestamp ?? null,
+            rate_count: Object.keys(payload.rates ?? {}).length
+          },
+      is_error: Boolean(providerError),
+      error_message: providerError ?? undefined,
+      duration_ms: Date.now() - startedAt
+    });
+
+    if (providerError) {
+      throw new AppError(`Exchange rate provider error: ${providerError}`, 502);
     }
 
     return payload;

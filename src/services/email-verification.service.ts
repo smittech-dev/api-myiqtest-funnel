@@ -1,4 +1,9 @@
 import { config } from '../config/env.config.js';
+import {
+  externalApiLogService,
+  redactUrl,
+  EXTERNAL_API_SERVICE
+} from './external-api-log.service.js';
 import { logger } from '../utils/logger.util.js';
 
 /**
@@ -59,18 +64,62 @@ export class EmailVerificationService {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), config.emailVerification.timeoutMs);
 
+    // The key rides in the query string, so the stored endpoint must be the
+    // masked form — never `url` itself.
+    const endpoint = redactUrl(url);
+    const requestPayload = { email, mode: config.emailVerification.mode };
+    const startedAt = Date.now();
+
     let payload: ReoonResponse;
     try {
       const response = await fetch(url, { signal: controller.signal });
 
       if (!response.ok) {
+        await externalApiLogService.log({
+          service_name: EXTERNAL_API_SERVICE.REOON,
+          endpoint,
+          method: 'GET',
+          status_code: response.status,
+          request_payload: requestPayload,
+          is_error: true,
+          error_message: `Provider returned HTTP ${response.status}`,
+          duration_ms: Date.now() - startedAt
+        });
+
         logger.warn(`Reoon returned HTTP ${response.status} for ${email}`);
         return skipped(`provider returned HTTP ${response.status}`);
       }
 
       payload = (await response.json()) as ReoonResponse;
+
+      // A 200 body can still be a refusal (`error`/`message`), so `is_error`
+      // here is the transport verdict; the check below overwrites nothing and
+      // instead records the provider's own complaint as a second row would be
+      // noise — it is folded into this one via the payload.
+      await externalApiLogService.log({
+        service_name: EXTERNAL_API_SERVICE.REOON,
+        endpoint,
+        method: 'GET',
+        status_code: response.status,
+        request_payload: requestPayload,
+        response_payload: payload,
+        is_error: Boolean(payload.error || payload.message),
+        error_message: (payload.error || payload.message) ?? undefined,
+        duration_ms: Date.now() - startedAt
+      });
     } catch (err: any) {
       const reason = err?.name === 'AbortError' ? 'request timed out' : err?.message;
+
+      await externalApiLogService.log({
+        service_name: EXTERNAL_API_SERVICE.REOON,
+        endpoint,
+        method: 'GET',
+        request_payload: requestPayload,
+        is_error: true,
+        error_message: `Provider unreachable: ${reason}`,
+        duration_ms: Date.now() - startedAt
+      });
+
       logger.warn(`Reoon verification failed for ${email}: ${reason}`);
       return skipped(`provider unreachable: ${reason}`);
     } finally {

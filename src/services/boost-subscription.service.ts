@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { AppDataSource } from '../config/database.config.js';
 import { config } from '../config/env.config.js';
+import { stripe } from '../config/stripe.config.js';
 import { CustomerSubscription } from '../entities/CustomerSubscription.entity.js';
 import { CustomerQuizResult } from '../entities/CustomerQuizResult.entity.js';
 import { CustomerQuizResultPaymentTransaction } from '../entities/CustomerQuizResultPaymentTransaction.entity.js';
@@ -11,9 +12,6 @@ import { BoostError } from '../utils/boost-response.util.js';
 import { logger } from '../utils/logger.util.js';
 import { readSubscriptionPeriod } from '../utils/stripe-period.util.js';
 import type { SubscriptionDto } from '../types/boost.types.js';
-
-/** The same API version the funnel's payment service pins, so both see one Stripe. */
-const stripe = new Stripe(config.stripe.secretKey, { apiVersion: '2025-02-24.acacia' as any });
 
 const subscriptionRepo = () => AppDataSource.getRepository(CustomerSubscription);
 

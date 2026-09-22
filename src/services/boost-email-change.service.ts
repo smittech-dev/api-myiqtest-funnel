@@ -1,8 +1,8 @@
 import crypto from 'crypto';
-import Stripe from 'stripe';
 import { IsNull } from 'typeorm';
 import { AppDataSource } from '../config/database.config.js';
 import { config } from '../config/env.config.js';
+import { stripe } from '../config/stripe.config.js';
 import { Customer } from '../entities/Customer.entity.js';
 import { CustomerQuizResult } from '../entities/CustomerQuizResult.entity.js';
 import { CustomerSubscription } from '../entities/CustomerSubscription.entity.js';
@@ -34,8 +34,6 @@ import type { EmailLanguage } from '../emails/email.types.js';
  *   6. **Never confirm whether an address is already registered.** The response
  *      is identical either way; the mismatch surfaces when the link is followed.
  */
-
-const stripe = new Stripe(config.stripe.secretKey, { apiVersion: '2025-02-24.acacia' as any });
 
 const changeRepo = () => AppDataSource.getRepository(BoostEmailChange);
 const customerRepo = () => AppDataSource.getRepository(Customer);

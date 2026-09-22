@@ -99,13 +99,75 @@ new-funnel-backend/
 3. **`customer_quiz_results`**: Core attempt record (email, demographics, score, duration, landing attribution, report URLs).
 4. **`customer_quiz_result_payment_transactions`**: Stripe payment transactions (first-sale, cross-sell/upsell, refunds, JPY/GBP currency amounts).
 5. **`currency_rates`**: JPY to GBP exchange rates for financial normalization and dynamic pricing.
-6. **`external_api_logs`**: Outgoing/incoming third-party API logs (Stripe, webhooks, email).
+6. **`external_api_logs`**: Every third-party call, outgoing and incoming — see [External API logging](#-external-api-logging).
 7. **`users`**: Admin/internal backoffice users.
 8. **`email_marketing_logs`**: One row per (customer, marketing step) — the record that stops a customer receiving the same nudge twice.
 9. **`email_marketing_settings`**: Singleton row of sequence-wide options (on/off, batch size, retry limit, age guard).
 10. **`email_marketing_steps`**: One row per rung of the discount ladder — delay, discount code, template.
 11. **`email_transactional_logs`**: Delivery record for the welcome and report-ready emails, deduped per purchase.
 12. **`contact_inquiries`**: One row per contact-form submission, with the outcome of the admin notification recorded on it.
+
+---
+
+## 📡 External API logging
+
+Every call across a process boundary lands in `external_api_logs`, so a third-party
+failure is answerable after the fact instead of only while the logs are still warm.
+`service_name` is indexed and says which side of the boundary the row is from:
+
+| `service_name` | Direction | Written by | `endpoint` holds |
+|---|---|---|---|
+| `zeptomail` | outgoing | `email.service.ts` | Provider URL |
+| `reoon` | outgoing | `email-verification.service.ts` | Verify URL, API key masked |
+| `exchange_rates` | outgoing | `currency-rate.service.ts` | Rates URL, API key masked |
+| `stripe` | outgoing | `config/stripe.config.ts` | SDK path, e.g. `/v1/payment_intents` |
+| `stripe_webhook` | **incoming** | `payment.service.ts` | Event type, e.g. `invoice.paid` |
+
+An outgoing Stripe call and an incoming Stripe webhook are separate `service_name`
+values rather than one name plus a direction flag, so telling them apart costs a
+lookup on the index that already exists and no second predicate.
+
+**Stripe outgoing** is one `stripe.on('response')` listener on the shared client in
+`config/stripe.config.ts`, not a wrapper at each of the ~20 call sites — a call added
+later cannot silently escape the log. It records status, path, duration and
+`request_id` (the thing Stripe support asks for), but no bodies: those would carry
+customer PII into a table that exists to be read during debugging. It cannot see a
+connection that never completed, because the SDK emits no event for one; by then it
+has exhausted its own retries and thrown, so that surfaces as an application error. A
+Stripe *rejection* — 402 on a decline, 400 on a bad request — is a completed round
+trip and is captured like any other.
+
+**Stripe webhooks** get one row per delivery, carrying a summary of the event rather
+than the event: Stripe keeps the full object retrievable by `event.id`, so copying an
+entire invoice into `jsonb` on every renewal would buy table size and nothing else.
+The summary keeps what the handlers branch on — ids, status, amount, currency,
+customer, subscription and our own `metadata`. Three outcomes are recorded:
+
+- **200** — dispatched cleanly.
+- **500** — the event was genuine but its handler threw. Logged before the rethrow,
+  because the rethrow is what makes Stripe redeliver; without the row, a repeatedly
+  failing event is a burst of identical 500s with nothing saying which event.
+- **400**, under `signature_verification_failed` — either the wrong
+  `STRIPE_WEBHOOK_SECRET` for the environment, in which case *every* payment
+  silently stops reconciling and nothing else says so, or an unsigned POST from
+  someone who found the endpoint. Neither ever reaches the payment tables, so this
+  row is the only trace.
+
+Redeliveries are logged as separate rows on purpose — a retry storm is a thing you
+want to be able to see. Dedupe on `request_payload->>'event_id'` when counting.
+
+Two rules hold for every writer:
+
+- **Credentials never land in the table.** Reoon and the exchange-rate provider both
+  take their API key in the query string, so `redactUrl()` masks it before the URL is
+  stored. Anything added later that authenticates by query parameter must go through
+  the same helper.
+- **Payloads are capped** at 20,000 characters by the service itself, not by its
+  callers, so a payload nobody thought to trim is truncated to a preview rather than
+  bloating the table.
+
+`log()` never throws and never rejects: a logging failure is swallowed and reported to
+the application log, because losing an audit row must not cost a payment.
 
 ---
 
@@ -491,7 +553,7 @@ the provider payload — they name a template and hand over a context.
 
 Every call is recorded in `external_api_logs` under `zeptomail`, with the rendered HTML body
 replaced by a size marker — a 40KB email per send would otherwise make that the largest table
-in the database within a week.
+in the database within a week. See [External API logging](#-external-api-logging).
 
 Sending **never throws**. A provider outage returns `{ status: 'failed', error }` so the
 marketing run can record the reason and carry on with the next recipient.

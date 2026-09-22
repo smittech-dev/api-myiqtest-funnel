@@ -6,6 +6,8 @@ import { CustomerQuizResultPaymentTransaction } from '../entities/CustomerQuizRe
 import { Customer } from '../entities/Customer.entity.js';
 import { CustomerSubscription } from '../entities/CustomerSubscription.entity.js';
 import { currencyRateService } from './currency-rate.service.js';
+import { stripe } from '../config/stripe.config.js';
+import { externalApiLogService, EXTERNAL_API_SERVICE } from './external-api-log.service.js';
 import { AppError } from '../utils/app-error.util.js';
 import { EncryptionUtil } from '../utils/encryption.util.js';
 import { getPricingByLanguage, applyDiscount, resolveDiscountCode } from '../constants/pricing.constants.js';
@@ -61,9 +63,9 @@ export class PaymentService {
   private subscriptionRepository = AppDataSource.getRepository(CustomerSubscription);
 
   constructor() {
-    this.stripe = new Stripe(config.stripe.secretKey, {
-      apiVersion: '2025-02-24.acacia' as any
-    });
+    // The shared client: pinned API version and outgoing-call logging live with
+    // it, so every service sees the same Stripe and the same log coverage.
+    this.stripe = stripe;
   }
 
   private async findQuizResult(identifier: string): Promise<CustomerQuizResult> {
@@ -1139,6 +1141,7 @@ export class PaymentService {
    * Stripe Webhook Handler: confirms first sale, cross sale, and subscriptions
    */
   async handleWebhook(rawBody: Buffer, signature: string): Promise<{ received: boolean }> {
+    const startedAt = Date.now();
     let event: Stripe.Event;
 
     try {
@@ -1148,12 +1151,105 @@ export class PaymentService {
         config.stripe.webhookSecret
       );
     } catch (err: any) {
+      // Worth a row of its own. A rejected signature is either the wrong
+      // STRIPE_WEBHOOK_SECRET for this environment — in which case *every*
+      // payment silently stops reconciling and nothing else says so — or an
+      // unsigned POST from someone who found the endpoint. Both are invisible
+      // in the payment tables, because neither ever reaches them.
+      await externalApiLogService.log({
+        service_name: EXTERNAL_API_SERVICE.STRIPE_WEBHOOK,
+        endpoint: 'signature_verification_failed',
+        method: 'POST',
+        status_code: 400,
+        request_payload: {
+          signature_header_present: Boolean(signature),
+          body_bytes: rawBody?.length ?? 0
+        },
+        is_error: true,
+        error_message: `Signature verification failed: ${err.message}`,
+        duration_ms: Date.now() - startedAt
+      });
+
       logger.error(`⚠️ Webhook signature verification failed: ${err.message}`);
       throw new AppError(`Webhook Error: ${err.message}`, 400);
     }
 
     logger.info(`Received Stripe Webhook Event: ${event.type} [${event.id}]`);
 
+    try {
+      await this.dispatchWebhookEvent(event);
+    } catch (err: any) {
+      // The handler failed after the event was accepted as genuine. Logged
+      // before rethrowing, because the rethrow becomes a 500 and Stripe will
+      // redeliver — so without this row the only trace of a repeatedly failing
+      // event is a burst of identical 500s with no record of which event.
+      await externalApiLogService.log({
+        service_name: EXTERNAL_API_SERVICE.STRIPE_WEBHOOK,
+        endpoint: event.type,
+        method: 'POST',
+        status_code: 500,
+        request_payload: this.summarizeWebhookEvent(event),
+        is_error: true,
+        error_message: err?.message ?? String(err),
+        duration_ms: Date.now() - startedAt
+      });
+
+      throw err;
+    }
+
+    await externalApiLogService.log({
+      service_name: EXTERNAL_API_SERVICE.STRIPE_WEBHOOK,
+      endpoint: event.type,
+      method: 'POST',
+      status_code: 200,
+      request_payload: this.summarizeWebhookEvent(event),
+      is_error: false,
+      duration_ms: Date.now() - startedAt
+    });
+
+    return { received: true };
+  }
+
+  /**
+   * What is kept from an event.
+   *
+   * Deliberately not the whole thing. Stripe keeps the full event retrievable by
+   * its id, so copying an entire invoice into jsonb on every renewal buys table
+   * size and nothing else. What is here is what the handlers below branch on,
+   * which is what makes a row readable without a trip to the dashboard.
+   */
+  private summarizeWebhookEvent(event: Stripe.Event): Record<string, any> {
+    const object = event.data?.object as Record<string, any> | undefined;
+    const id = (value: any): string | null =>
+      typeof value === 'string' ? value : (value?.id ?? null);
+
+    return {
+      event_id: event.id,
+      type: event.type,
+      livemode: event.livemode,
+      api_version: event.api_version,
+      created: event.created,
+      object: object
+        ? {
+            id: object.id ?? null,
+            object: object.object ?? null,
+            status: object.status ?? null,
+            // Invoices carry the figure under a different name to charges and
+            // payment intents; whichever one is present is the money involved.
+            amount: object.amount ?? object.amount_paid ?? object.amount_due ?? null,
+            currency: object.currency ?? null,
+            customer: id(object.customer),
+            subscription: id(object.subscription),
+            payment_intent: id(object.payment_intent),
+            // Carries quiz_id and sale type — the link back to our own rows.
+            metadata: object.metadata ?? null
+          }
+        : null
+    };
+  }
+
+  /** Routes one verified event to its handler. */
+  private async dispatchWebhookEvent(event: Stripe.Event): Promise<void> {
     switch (event.type) {
       case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -1206,8 +1302,6 @@ export class PaymentService {
       default:
         logger.info(`Unhandled event type: ${event.type}`);
     }
-
-    return { received: true };
   }
 
   /**
