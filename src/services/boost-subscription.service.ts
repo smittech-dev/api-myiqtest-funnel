@@ -88,7 +88,11 @@ const PLAN_LABELS: Record<string, string> = {
   // billed every 28 days since SUBSCRIPTION_INTERVAL_DAYS was introduced.
   'iq brain training': PROGRAM_NAME,
   'iq脳力トレーニング': PROGRAM_NAME,
-  'iq training monthly': PROGRAM_NAME
+  'iq training monthly': PROGRAM_NAME,
+  // What BRAIN_TRAINING_NAME defaulted to before the rename, so anything sold
+  // while that default was live still reads as the current name.
+  'brain training program': PROGRAM_NAME,
+  '脳力トレーニングプログラム': PROGRAM_NAME
 };
 
 const planLabelFor = (planName: string | null): string => {
