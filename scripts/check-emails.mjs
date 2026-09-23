@@ -10,6 +10,10 @@
  *   - the reset email never carries a password;
  *   - the welcome email never announces a free trial unless there is one;
  *   - a report never offers a document that was not bought;
+ *   - every marketing email carries an unsubscribe link, and no transactional
+ *     one does;
+ *   - every message ships dark-mode rules, so forced-dark clients do not
+ *     invent their own and hide the copy;
  *   - Japanese renders with a Japanese font stack and logo, not a Latin one;
  *   - the shell matches the reference design in docs/email-template-ref.
  *
@@ -36,6 +40,7 @@ function contextFor(language, overrides = {}) {
       iq_band: language === 'ja' ? '高い' : 'Superior',
       cta_url: SITE + '/result',
       hours_since_quiz: 26,
+      unsubscribe_url: SITE + '/email/unsubscribe?t=sample&lang=' + language,
       discount_code: 'BRAIN20',
       discount_percent: 20,
       login_email: 'customer@example.com',
@@ -229,6 +234,49 @@ for (const language of LANGUAGES) {
   }
 }
 
+/* ── the opt-out, and the split it depends on ─────────────────────────────── */
+
+/**
+ * The asymmetry this asserts is the whole design, and it fails silently in both
+ * directions: a marketing email with no unsubscribe link is a complaint and, in
+ * several jurisdictions, a fine; a receipt *with* one offers something the
+ * service will not honour, because `emailService.send` only suppresses
+ * marketing. Neither is visible from reading one template.
+ */
+for (const language of LANGUAGES) {
+  const ctx = contextFor(language);
+
+  for (const template of listTemplates()) {
+    const html = renderTemplate(template.id, ctx).html;
+    const hasLink = html.includes('/email/unsubscribe');
+    const where = `${template.id} (${language})`;
+
+    if (template.category === 'marketing' && !hasLink) {
+      fail(`${where}: marketing email with no unsubscribe link`);
+    }
+    if (template.category === 'transactional' && hasLink) {
+      fail(`${where}: transactional email offering an opt-out it cannot honour`);
+    }
+
+    // The reason the reset email went unreadable in Zoho: a message that
+    // declares light-only invites a forced-dark client to invent a scheme,
+    // darkening the card and leaving the inlined body colour where it was.
+    if (!html.includes('prefers-color-scheme: dark')) {
+      fail(`${where}: no dark-mode rules`);
+    }
+    if (html.includes('content="light"')) {
+      fail(`${where}: declares light-only colour-scheme`);
+    }
+    // The classes those rules hang off. Present on every message via the shell,
+    // so their absence means a design stopped going through renderLayout.
+    for (const cls of ['e-card', 'e-ink', 'e-muted']) {
+      if (!html.includes(`class="${cls}"`) && !html.includes(`${cls}"`)) {
+        fail(`${where}: shell class ${cls} is missing`);
+      }
+    }
+  }
+}
+
 /* ── report ───────────────────────────────────────────────────────────────── */
 
 if (problems.length) {
@@ -243,5 +291,7 @@ console.log('- no placeholder survives into a sent message');
 console.log('- the reset email carries no password');
 console.log('- the welcome email claims a trial only when there is one');
 console.log('- no email offers a document that was not bought');
+console.log('- marketing emails carry an unsubscribe link; transactional ones do not');
+console.log('- every message ships dark-mode rules');
 console.log('- Japanese renders with a Japanese font stack and logo');
 console.log('\n✓ email templates OK');

@@ -32,6 +32,56 @@ const PALE_BLUE = '#f1f5fa';
 const HAIRLINE = 'rgba(18,41,74,0.12)';
 
 /**
+ * The same palette again, for clients rendering in dark mode.
+ *
+ * Needed because a forced-dark client that is given no dark styles of its own
+ * invents them: it darkens the backgrounds it can see and leaves every inlined
+ * `color:` alone, which is exactly how #101826 body copy ends up on a near-black
+ * card. Zoho Mail does this; Gmail's web client does not, which is why the same
+ * message reads correctly in one and disappears in the other.
+ *
+ * So the shell declares `color-scheme: light dark` — telling the client we
+ * handle it — and ships this palette behind `prefers-color-scheme`. Every value
+ * is picked to keep the light design's contrast relationships rather than to
+ * invert them: ink stays the brightest thing on the card, muted stays a step
+ * below it, and coral is lifted because #d94f3d on near-black is unreadable.
+ *
+ * The rules are class-based and `!important`, because inline styles beat a
+ * `<style>` block otherwise, and every element they target is classed below.
+ */
+const DARK = {
+  canvas: '#0b1220',
+  card: '#141c2b',
+  panel: '#1b2435',
+  /** The navy CTA/score card, kept dark so a client cannot invert it to white. */
+  deep: '#0d1b30',
+  ink: '#eef2f7',
+  muted: '#c2cbd8',
+  faint: '#9aa5b4',
+  pale: '#8792a1',
+  coral: '#ff9280',
+  link: '#ff9c88',
+  /** Where NAVY is used as a text colour on a light panel. */
+  navyText: '#dbe6f5',
+  hairline: 'rgba(255,255,255,0.14)',
+  /**
+   * The masthead band stays light in dark mode, unlike the card under it.
+   *
+   * The logo is a hosted PNG in three brand colours — navy, grey and coral —
+   * and there is no white PNG of it on the same host. Darkening the band it
+   * sits on would leave a navy wordmark on a near-black strip, and the two
+   * fixes that need no new asset are both worse: `brightness(0) invert(1)`
+   * flattens the coral accent to white, and swapping in an SVG loses Gmail and
+   * Outlook, which do not render them.
+   *
+   * So the band keeps its light background and reads as a letterhead. Replace
+   * this with `DARK.card` on the day a white PNG is published at the same
+   * origin, and give `.e-masthead-tag` a dark-mode colour at the same time.
+   */
+  masthead: '#ffffff'
+};
+
+/**
  * Two stacks per language, because the reference sets headings in Sora and body
  * copy in a plain grotesque, and mixing them is most of the look.
  *
@@ -140,8 +190,8 @@ export function button(
       (align === 'center' ? ' align="center" style="margin:0 auto;"' : '') +
       '>',
     '<tr>',
-    '<td align="center" bgcolor="' + bg + '" style="border-radius:999px;">',
-    '<a href="' +
+    '<td align="center" bgcolor="' + bg + '" class="e-btn" style="background-color:' + bg + '; border-radius:999px;">',
+    '<a class="e-on-deep" href="' +
       escapeHtml(url) +
       '" target="_blank" style="display:inline-block; padding:' +
       padding +
@@ -169,7 +219,7 @@ export function ctaCard(
   opts: { title: string; label: string; url: string; note?: string; tone?: 'coral' | 'coralDeep' }
 ): string {
   const noteRow = opts.note
-    ? '<p style="margin:16px 0 0 0; font-family:' +
+    ? '<p class="e-on-deep-muted" style="margin:16px 0 0 0; font-family:' +
       BODY[language] +
       '; font-size:12px; line-height:19px; color:rgba(255,255,255,0.55);">' +
       escapeHtml(opts.note) +
@@ -177,11 +227,13 @@ export function ctaCard(
     : '';
 
   return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-deep" bgcolor="' +
+      NAVY +
+      '" style="background-color:' +
       NAVY +
       '; border-radius:14px;">',
     '<tr><td align="center" style="padding:30px 24px;">',
-    '<p style="margin:0 0 20px 0; font-family:' +
+    '<p class="e-on-deep" style="margin:0 0 20px 0; font-family:' +
       DISPLAY[language] +
       '; font-size:22px; line-height:30px; font-weight:bold; color:#ffffff;">' +
       escapeHtml(opts.title) +
@@ -209,16 +261,18 @@ export function scoreCard(
     : '';
 
   return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-deep" bgcolor="' +
+      NAVY +
+      '" style="background-color:' +
       NAVY +
       '; border-radius:14px;">',
     '<tr><td align="center" style="padding:30px 24px 26px 24px;">',
-    '<p style="margin:0 0 6px 0; font-family:' +
+    '<p class="e-on-deep-muted" style="margin:0 0 6px 0; font-family:' +
       DISPLAY[language] +
       '; font-size:10px; line-height:16px; font-weight:bold; letter-spacing:2px; text-transform:uppercase; color:rgba(255,255,255,0.6);">' +
       escapeHtml(opts.label) +
       '</p>',
-    '<p class="score-num" style="margin:0 0 4px 0; font-family:' +
+    '<p class="score-num e-on-deep" style="margin:0 0 4px 0; font-family:' +
       DISPLAY[language] +
       '; font-size:68px; line-height:72px; font-weight:bold; letter-spacing:-2px; color:#ffffff;">' +
       escapeHtml(opts.score) +
@@ -234,7 +288,9 @@ export function panel(html: string, tone: 'cream' | 'blue' | 'canvas' = 'cream')
   const bg = tone === 'blue' ? PALE_BLUE : tone === 'canvas' ? CANVAS : CREAM;
 
   return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-panel" bgcolor="' +
+      bg +
+      '" style="background-color:' +
       bg +
       '; border-radius:14px;">',
     '<tr><td style="padding:24px 24px 26px 24px;">',
@@ -247,7 +303,7 @@ export function panel(html: string, tone: 'cream' | 'blue' | 'canvas' = 'cream')
 /** A panel heading, with optional supporting line. */
 export function panelHeading(language: EmailLanguage, title: string, lede?: string): string {
   const ledeRow = lede
-    ? '<p style="margin:0 0 18px 0; font-family:' +
+    ? '<p class="e-muted" style="margin:0 0 18px 0; font-family:' +
       BODY[language] +
       '; font-size:13px; line-height:21px; color:' +
       MUTED +
@@ -257,7 +313,7 @@ export function panelHeading(language: EmailLanguage, title: string, lede?: stri
     : '';
 
   return (
-    '<h3 style="margin:0 0 ' +
+    '<h3 class="e-ink" style="margin:0 0 ' +
     (lede ? '6px' : '10px') +
     ' 0; font-family:' +
     DISPLAY[language] +
@@ -290,7 +346,7 @@ export function numberedList(language: EmailLanguage, items: NumberedItem[]): st
           (last ? '' : ' style="margin-bottom:18px;"') +
           '>',
         '<tr>',
-        '<td width="34" valign="top" style="font-family:' +
+        '<td width="34" valign="top" class="e-coral" style="font-family:' +
           BODY[language] +
           '; font-size:13px; line-height:22px; font-weight:bold; color:' +
           CORAL +
@@ -298,14 +354,14 @@ export function numberedList(language: EmailLanguage, items: NumberedItem[]): st
           String(i + 1).padStart(2, '0') +
           '</td>',
         '<td valign="top">',
-        '<p style="margin:0 0 3px 0; font-family:' +
+        '<p class="e-ink" style="margin:0 0 3px 0; font-family:' +
           DISPLAY[language] +
           '; font-size:15px; line-height:22px; font-weight:bold; color:' +
           INK +
           ';">' +
           escapeHtml(item.title) +
           '</p>',
-        '<p style="margin:0; font-family:' +
+        '<p class="e-muted" style="margin:0; font-family:' +
           BODY[language] +
           '; font-size:13px; line-height:21px; color:' +
           MUTED +
@@ -334,14 +390,14 @@ export function credentialsPanel(
     '<tr><td style="padding:14px 16px ' +
       (opts.password ? '6px' : '14px') +
       ' 16px;">' +
-      '<p style="margin:0 0 2px 0; font-family:' +
+      '<p class="e-faint" style="margin:0 0 2px 0; font-family:' +
       BODY[language] +
       '; font-size:10px; line-height:16px; letter-spacing:1.2px; text-transform:uppercase; color:' +
       FAINT +
       ';">' +
       escapeHtml(opts.emailLabel) +
       '</p>' +
-      '<p style="margin:0; font-family:' +
+      '<p class="e-navy-text" style="margin:0; font-family:' +
       DISPLAY[language] +
       '; font-size:14px; line-height:22px; font-weight:bold; color:' +
       NAVY +
@@ -354,14 +410,14 @@ export function credentialsPanel(
   if (opts.password) {
     rows.push(
       '<tr><td style="padding:8px 16px 14px 16px;">' +
-        '<p style="margin:0 0 2px 0; font-family:' +
+        '<p class="e-faint" style="margin:0 0 2px 0; font-family:' +
         BODY[language] +
         '; font-size:10px; line-height:16px; letter-spacing:1.2px; text-transform:uppercase; color:' +
         FAINT +
         ';">' +
         escapeHtml(opts.passwordLabel) +
         '</p>' +
-        '<p style="margin:0; font-family:' +
+        '<p class="e-navy-text" style="margin:0; font-family:' +
         MONO +
         '; font-size:15px; line-height:22px; font-weight:bold; letter-spacing:1px; color:' +
         NAVY +
@@ -373,7 +429,7 @@ export function credentialsPanel(
   } else if (opts.note) {
     rows.push(
       '<tr><td style="padding:0 16px 14px 16px;">' +
-        '<p style="margin:0; font-family:' +
+        '<p class="e-muted" style="margin:0; font-family:' +
         BODY[language] +
         '; font-size:12px; line-height:20px; color:' +
         MUTED +
@@ -385,7 +441,9 @@ export function credentialsPanel(
   }
 
   return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-card e-hairline" bgcolor="' +
+      CARD +
+      '" style="background-color:' +
       CARD +
       '; border:1px solid ' +
       HAIRLINE +
@@ -401,7 +459,7 @@ export function ruleNote(language: EmailLanguage, html: string): string {
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-left:3px solid ' +
       CORAL +
       ';">',
-    '<tr><td style="padding:2px 0 2px 16px; font-family:' +
+    '<tr><td class="e-muted" style="padding:2px 0 2px 16px; font-family:' +
       BODY[language] +
       '; font-size:13px; line-height:22px; color:' +
       MUTED +
@@ -426,14 +484,14 @@ export function recordRow(language: EmailLanguage, fields: RecordField[]): strin
         '<td width="50%" class="stack" style="' +
         pad +
         '">' +
-        '<p style="margin:0 0 2px 0; font-family:' +
+        '<p class="e-faint" style="margin:0 0 2px 0; font-family:' +
         BODY[language] +
         '; font-size:10px; line-height:14px; letter-spacing:1.4px; text-transform:uppercase; color:' +
         FAINT +
         ';">' +
         escapeHtml(field.label) +
         '</p>' +
-        '<p style="margin:0; font-family:' +
+        '<p class="e-navy-text" style="margin:0; font-family:' +
         BODY[language] +
         '; font-size:13px; line-height:20px; font-weight:bold; color:' +
         NAVY +
@@ -446,7 +504,7 @@ export function recordRow(language: EmailLanguage, fields: RecordField[]): strin
     .join('');
 
   return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid ' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-hairline" style="border-top:1px solid ' +
       HAIRLINE +
       ';">',
     '<tr>' + cells + '</tr>',
@@ -464,7 +522,7 @@ export function receipt(
       const pad = i === 0 ? '0' : '10px 0 0 0';
       return (
         '<tr>' +
-        '<td style="padding:' +
+        '<td class="e-muted" style="padding:' +
         pad +
         '; font-family:' +
         BODY[language] +
@@ -473,7 +531,7 @@ export function receipt(
         ';">' +
         escapeHtml(row.label) +
         '</td>' +
-        '<td align="right" style="padding:' +
+        '<td align="right" class="e-navy-text" style="padding:' +
         pad +
         '; font-family:' +
         DISPLAY[language] +
@@ -488,7 +546,7 @@ export function receipt(
     .join('');
 
   return [
-    '<p style="margin:0 0 14px 0; font-family:' +
+    '<p class="e-coral" style="margin:0 0 14px 0; font-family:' +
       DISPLAY[language] +
       '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
       CORAL +
@@ -504,14 +562,14 @@ export function receipt(
 /** A section heading in the body flow: coral eyebrow over a dark title. */
 export function sectionHeading(language: EmailLanguage, eyebrow: string, title: string): string {
   return (
-    '<p style="margin:0 0 4px 0; font-family:' +
+    '<p class="e-coral" style="margin:0 0 4px 0; font-family:' +
     DISPLAY[language] +
     '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
     CORAL +
     ';">' +
     escapeHtml(eyebrow) +
     '</p>' +
-    '<h2 style="margin:0 0 22px 0; font-family:' +
+    '<h2 class="e-ink" style="margin:0 0 22px 0; font-family:' +
     DISPLAY[language] +
     '; font-size:20px; line-height:28px; font-weight:bold; letter-spacing:-0.3px; color:' +
     INK +
@@ -524,7 +582,7 @@ export function sectionHeading(language: EmailLanguage, eyebrow: string, title: 
 /** A paragraph in the body voice. Content is escaped unless `html` is set. */
 export function paragraph(text: string, opts: { html?: boolean } = {}): string {
   return (
-    '<p style="margin:0 0 14px 0; font-size:15px; line-height:26px; color:' +
+    '<p class="e-muted" style="margin:0 0 14px 0; font-size:15px; line-height:26px; color:' +
     MUTED +
     ';">' +
     (opts.html ? text : escapeHtml(text)) +
@@ -540,17 +598,19 @@ export function scoreLine(language: EmailLanguage, score: number | null): string
 
   return [
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 18px;">',
-    '<tr><td style="background:' +
+    '<tr><td class="e-panel" bgcolor="' +
+      CREAM +
+      '" style="background:' +
       CREAM +
       '; border-radius:10px; padding:12px 18px;">',
-    '<span style="font-family:' +
+    '<span class="e-faint" style="font-family:' +
       BODY[language] +
       '; font-size:12px; color:' +
       FAINT +
       ';">' +
       escapeHtml(label) +
       '</span>',
-    '<span style="font-family:' +
+    '<span class="e-ink" style="font-family:' +
       DISPLAY[language] +
       '; font-size:22px; font-weight:bold; color:' +
       INK +
@@ -578,18 +638,20 @@ export function discountPanel(
         : 'COUPON CODE';
 
   return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-panel" bgcolor="' +
+      CREAM +
+      '" style="background-color:' +
       CREAM +
       '; border-radius:14px;">',
     '<tr><td align="center" style="padding:22px 24px;">',
-    '<p style="margin:0 0 8px 0; font-family:' +
+    '<p class="e-coral" style="margin:0 0 8px 0; font-family:' +
       DISPLAY[language] +
       '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
       CORAL +
       ';">' +
       escapeHtml(label) +
       '</p>',
-    '<p style="margin:0; font-family:' +
+    '<p class="e-navy-text" style="margin:0; font-family:' +
       MONO +
       '; font-size:26px; line-height:34px; font-weight:bold; letter-spacing:3px; color:' +
       NAVY +
@@ -646,24 +708,56 @@ interface LayoutOptions {
   footerNote?: string;
   /** The address this was sent to, named in the footer so it is verifiable. */
   recipientEmail?: string;
+  /**
+   * One-click opt-out, rendered in the footer when present.
+   *
+   * Set for marketing sends and left unset for transactional ones, and that
+   * asymmetry is deliberate rather than an oversight: a password reset and a
+   * receipt are not things a customer can decline while holding an account, and
+   * offering to stop sending them is offering something we will not honour. See
+   * `unsubscribeUrlFor` in src/services/email-unsubscribe.service.ts, which is
+   * what decides per template.
+   */
+  unsubscribeUrl?: string;
   siteUrl: string;
   brandName?: string;
 }
 
-const FOOTER_COPY: Record<EmailLanguage, { receiving: string; questions: string; support: string; privacy: string; terms: string }> = {
+const FOOTER_COPY: Record<
+  EmailLanguage,
+  {
+    receiving: string;
+    questions: string;
+    support: string;
+    privacy: string;
+    terms: string;
+    unsubLead: string;
+    unsubLink: string;
+    unsubTail: string;
+  }
+> = {
   en: {
     receiving: 'You are receiving this because you took the myIQ Test with the email address',
     questions: 'Questions? Write to',
     support: 'and a person will reply.',
     privacy: 'Privacy',
-    terms: 'Terms'
+    terms: 'Terms',
+    // Says what stops and what does not. "Unsubscribe from everything" is the
+    // reading people fear, and it is the one thing this link does not do —
+    // receipts and password resets keep arriving, because they have to.
+    unsubLead: 'Would you rather not hear from us?',
+    unsubLink: 'Unsubscribe',
+    unsubTail: 'You will still receive receipts and account emails.'
   },
   ja: {
     receiving: 'このメールは、次のメールアドレスでmyIQテストを受験された方にお送りしています：',
     questions: 'ご不明な点がございましたら、',
     support: 'までご連絡ください。担当者よりご返信いたします。',
     privacy: 'プライバシーポリシー',
-    terms: '利用規約'
+    terms: '利用規約',
+    unsubLead: '今後このようなメールが不要な場合は、',
+    unsubLink: '配信を停止',
+    unsubTail: 'できます。領収書やアカウントに関するメールは引き続きお送りします。'
   }
 };
 
@@ -705,7 +799,7 @@ function renderFooter(language: EmailLanguage, opts: LayoutOptions): string {
       (language === 'ja' ? '' : '.');
 
   const legalLink = (slug: string, label: string) =>
-    '<a href="' +
+    '<a class="e-pale" href="' +
     legalBase +
     slug +
     '" target="_blank" style="color:' +
@@ -714,26 +808,53 @@ function renderFooter(language: EmailLanguage, opts: LayoutOptions): string {
     escapeHtml(label) +
     '</a>';
 
+  const gap = language === 'ja' ? '' : ' ';
+
+  // Set at 12px in the body colour rather than tucked in with the legal links,
+  // because an opt-out nobody can find is the reason people report spam instead.
+  const unsubscribeRow = opts.unsubscribeUrl
+    ? '<p class="e-muted" style="margin:0 0 12px 0; font-family:' +
+      body +
+      '; font-size:12px; line-height:20px; color:' +
+      MUTED +
+      ';">' +
+      escapeHtml(copy.unsubLead) +
+      // Japanese sets no space between a run of kana and the next character, so
+      // the joiner is per language rather than a hardcoded ' '.
+      gap +
+      '<a class="e-link" href="' +
+      escapeHtml(opts.unsubscribeUrl) +
+      '" target="_blank" style="color:' +
+      LINK +
+      '; text-decoration:underline;">' +
+      escapeHtml(copy.unsubLink) +
+      '</a>' +
+      (language === 'ja' ? '' : '.') +
+      gap +
+      escapeHtml(copy.unsubTail) +
+      '</p>'
+    : '';
+
   return [
     '<tr><td class="px" style="padding:28px 40px 34px 40px;">',
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid ' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-hairline" style="border-top:1px solid ' +
       HAIRLINE +
       ';">',
     '<tr><td style="padding-top:20px;">',
-    '<p style="margin:0 0 12px 0; font-family:' +
+    '<p class="e-muted" style="margin:0 0 12px 0; font-family:' +
       body +
       '; font-size:12px; line-height:20px; color:' +
       MUTED +
       ';">' +
       receiving +
       '</p>',
-    '<p style="margin:0 0 12px 0; font-family:' +
+    '<p class="e-muted" style="margin:0 0 12px 0; font-family:' +
       body +
       '; font-size:12px; line-height:20px; color:' +
       MUTED +
       ';">' +
       escapeHtml(copy.questions) +
-      ' <a href="mailto:' +
+      ' <a class="e-link" href="mailto:' +
       SUPPORT_EMAIL +
       '" style="color:' +
       LINK +
@@ -742,7 +863,8 @@ function renderFooter(language: EmailLanguage, opts: LayoutOptions): string {
       '</a> ' +
       escapeHtml(copy.support) +
       '</p>',
-    '<p style="margin:0; font-family:' +
+    unsubscribeRow,
+    '<p class="e-pale" style="margin:0; font-family:' +
       body +
       '; font-size:11px; line-height:18px; color:' +
       PALE +
@@ -755,6 +877,58 @@ function renderFooter(language: EmailLanguage, opts: LayoutOptions): string {
     '</table>',
     '</td></tr>'
   ].join('');
+}
+
+/**
+ * The dark-mode rules, as one block of CSS.
+ *
+ * Emitted twice by `darkStyles()` below: once behind `prefers-color-scheme`,
+ * and once behind `[data-ogsc]`/`[data-ogsb]`, which is the hook Outlook's own
+ * apps add to the body when they recolour a message. Same declarations, two
+ * doorways — between them they cover the clients that honour anything at all.
+ *
+ * Everything is `!important` because the design inlines its colours, and an
+ * inline style beats a stylesheet rule that is not.
+ */
+const DARK_RULES: Array<[string, string]> = [
+  ['.e-canvas', 'background-color:' + DARK.canvas + ' !important;'],
+  ['.e-card', 'background-color:' + DARK.card + ' !important;'],
+  ['.e-panel', 'background-color:' + DARK.panel + ' !important;'],
+  // The navy blocks were already dark. Pinning them stops a client "helpfully"
+  // inverting them to white and leaving white text on a white card.
+  ['.e-deep', 'background-color:' + DARK.deep + ' !important;'],
+  ['.e-on-deep', 'color:#ffffff !important;'],
+  ['.e-on-deep-muted', 'color:rgba(255,255,255,0.62) !important;'],
+  ['.e-ink', 'color:' + DARK.ink + ' !important;'],
+  ['.e-muted', 'color:' + DARK.muted + ' !important;'],
+  ['.e-faint', 'color:' + DARK.faint + ' !important;'],
+  ['.e-pale', 'color:' + DARK.pale + ' !important;'],
+  ['.e-coral', 'color:' + DARK.coral + ' !important;'],
+  ['.e-link', 'color:' + DARK.link + ' !important;'],
+  ['.e-navy-text', 'color:' + DARK.navyText + ' !important;'],
+  ['.e-hairline', 'border-color:' + DARK.hairline + ' !important;'],
+  ['.e-masthead', 'background-color:' + DARK.masthead + ' !important;'],
+  // `ruleNote` and the welcome email put an INK-inlined <strong> inside muted
+  // copy. Named so the emphasis survives rather than flattening into the body.
+  ['strong.e-ink', 'color:' + DARK.ink + ' !important;']
+];
+
+function darkStyles(): string {
+  const block = DARK_RULES.map(([selector, decls]) => selector + ' { ' + decls + ' }').join('\n  ');
+
+  // Outlook does not evaluate the media query; it stamps the body instead.
+  const outlook = DARK_RULES.map(
+    ([selector, decls]) =>
+      selector
+        .split(',')
+        .map((one) => '[data-ogsc] ' + one.trim() + ', [data-ogsb] ' + one.trim())
+        .join(', ') +
+      ' { ' +
+      decls +
+      ' }'
+  ).join('\n');
+
+  return '@media (prefers-color-scheme: dark) {\n  ' + block + '\n}\n' + outlook;
 }
 
 /** Wraps a design's body in the branded shell. */
@@ -781,7 +955,7 @@ export function renderLayout(options: LayoutOptions): string {
     '<tr><td class="px" style="padding:' + padding + '">' + html + '</td></tr>';
 
   const eyebrowRow = eyebrow
-    ? '<p style="margin:0 0 10px 0; font-family:' +
+    ? '<p class="e-coral" style="margin:0 0 10px 0; font-family:' +
       display +
       '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
       CORAL +
@@ -808,7 +982,7 @@ export function renderLayout(options: LayoutOptions): string {
 
   const footnoteRow = footnote
     ? row(
-        '<p style="margin:0; font-family:' +
+        '<p class="e-faint" style="margin:0; font-family:' +
           bodyFont +
           '; font-size:12px; line-height:20px; color:' +
           FAINT +
@@ -827,8 +1001,14 @@ export function renderLayout(options: LayoutOptions): string {
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     '<meta http-equiv="X-UA-Compatible" content="IE=edge" />',
     '<meta name="format-detection" content="telephone=no, date=no, address=no, email=no" />',
-    '<meta name="color-scheme" content="light" />',
-    '<meta name="supported-color-schemes" content="light" />',
+    // "light dark", not "light". Declaring light-only is what invites a
+    // forced-dark client to invent a scheme of its own — darkening the card it
+    // can see while leaving the inlined #101826 body copy exactly where it was,
+    // which is how this message went unreadable in Zoho Mail and stayed fine in
+    // Gmail. Claiming both, and then actually shipping the rules below, is what
+    // makes a client use ours instead of guessing.
+    '<meta name="color-scheme" content="light dark" />',
+    '<meta name="supported-color-schemes" content="light dark" />',
     '<meta name="x-apple-disable-message-reformatting" />',
     '<title>' + escapeHtml(headline) + '</title>',
     '<!--[if mso]>',
@@ -850,20 +1030,31 @@ export function renderLayout(options: LayoutOptions): string {
     '  .score-num { font-size:56px !important; line-height:60px !important; }',
     '  .btn a { display:block !important; }',
     '}',
+    darkStyles(),
     '</style>',
     '</head>',
-    '<body style="margin:0; padding:0; width:100%; background-color:' + CANVAS + ';">',
+    '<body class="e-canvas" style="margin:0; padding:0; width:100%; background-color:' + CANVAS + ';">',
     previewText ? previewBlock(previewText) : '',
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-canvas" bgcolor="' +
+      CANVAS +
+      '" style="background-color:' +
       CANVAS +
       ';">',
     '<tr><td align="center" style="padding:24px 12px 40px 12px;">',
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="wrapper" style="width:600px; max-width:600px; background-color:' +
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="wrapper e-card" bgcolor="' +
+      CARD +
+      '" style="width:600px; max-width:600px; background-color:' +
       CARD +
       ';">',
 
     // Masthead
-    '<tr><td class="px" style="padding:28px 40px 22px 40px; border-bottom:2px solid ' + NAVY + ';">',
+    '<tr><td class="px e-masthead" bgcolor="' +
+      CARD +
+      '" style="background-color:' +
+      CARD +
+      '; padding:28px 40px 22px 40px; border-bottom:2px solid ' +
+      NAVY +
+      ';">',
     '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>',
     '<td align="left">',
     '<a href="' + escapeHtml(siteUrl) + '" target="_blank" style="text-decoration:none;">',
@@ -882,7 +1073,7 @@ export function renderLayout(options: LayoutOptions): string {
       'px;" />',
     '</a>',
     '</td>',
-    '<td align="right" style="font-family:' +
+    '<td align="right" class="e-masthead-tag" style="font-family:' +
       display +
       '; font-size:10px; line-height:16px; font-weight:bold; letter-spacing:1.6px; text-transform:uppercase; color:' +
       FAINT +
@@ -895,7 +1086,7 @@ export function renderLayout(options: LayoutOptions): string {
     // Headline and lede
     row(
       eyebrowRow +
-        '<h1 class="h1" style="margin:0 0 14px 0; font-family:' +
+        '<h1 class="h1 e-ink" style="margin:0 0 14px 0; font-family:' +
         display +
         '; font-size:28px; line-height:36px; font-weight:bold; letter-spacing:-0.6px; color:' +
         INK +

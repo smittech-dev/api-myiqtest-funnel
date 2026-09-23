@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import swaggerUi from 'swagger-ui-express';
 import routes from './routes/index.js';
 import boostRoutes from './routes/boost.routes.js';
+import unsubscribeRoutes from './routes/unsubscribe.routes.js';
 import { swaggerSpec, swaggerSpecFor } from './config/swagger.config.js';
 import { config } from './config/env.config.js';
 import { requestLogger } from './middlewares/request-logger.middleware.js';
@@ -119,6 +120,12 @@ export function createApp(): Express {
   // publish it, which is strictly worse than not checking it. These routes
   // carry their own bearer-token guard — see src/routes/boost.routes.ts.
   app.use('/boost-api/v1', boostRoutes);
+
+  // The unsubscribe page. Mounted here for the same reason as the members'
+  // area: the caller is a mail client following a link out of an inbox, and it
+  // has no API key to send. It is also the one page that must keep working when
+  // everything in front of it is broken — see the note in the route file.
+  app.use('/email', unsubscribeRoutes);
 
   // API Key authentication (skips webhook — it uses Stripe signature)
   app.use(apiKeyAuth);

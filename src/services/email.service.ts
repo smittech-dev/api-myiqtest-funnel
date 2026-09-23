@@ -7,6 +7,7 @@ import {
   renderTemplate
 } from '../emails/registry.js';
 import { externalApiLogService, EXTERNAL_API_SERVICE } from './external-api-log.service.js';
+import { isUnsubscribed } from './email-unsubscribe.service.js';
 import { logger } from '../utils/logger.util.js';
 
 /**
@@ -71,6 +72,14 @@ export interface SendEmailInput {
   /** Recipient display name, when known. */
   toName?: string | null;
   context: EmailTemplateContext;
+  /**
+   * Sends a marketing template to an address that has opted out.
+   *
+   * Exists for exactly one caller — the admin "send me a preview" endpoint,
+   * where a person has asked for this specific message to this specific
+   * address. Nothing on a customer-facing path may set it.
+   */
+  ignoreUnsubscribe?: boolean;
 }
 
 export type EmailSendResult =
@@ -106,6 +115,35 @@ export class EmailService {
     const template = getTemplate(templateId);
     if (!template) {
       return { status: 'failed', error: `Unknown email template "${templateId}"`, statusCode: null };
+    }
+
+    /**
+     * The opt-out, enforced at the one point every email passes through.
+     *
+     * The marketing run already filters unsubscribed customers out of its
+     * candidate query, so in the normal case this check finds nothing and costs
+     * one indexed lookup. It is here anyway because "did you remember to check"
+     * is the wrong question to have to ask of each new send site — a future
+     * broadcast, a re-send button, a script — and this is the only place that
+     * cannot be bypassed by forgetting.
+     *
+     * Scoped to `category === 'marketing'` by the template's own definition, so
+     * a receipt or a password reset is never suppressed: someone who opted out
+     * of offers has not opted out of being told their password changed.
+     */
+    if (template.category === 'marketing' && !input.ignoreUnsubscribe) {
+      try {
+        if (await isUnsubscribed(to)) {
+          logger.info(`Email not sent to ${to}: the recipient has unsubscribed from marketing.`);
+          return { status: 'skipped', reason: 'The recipient has unsubscribed from marketing email.' };
+        }
+      } catch (error: any) {
+        // A database blip must not turn into a send to someone who opted out.
+        // Failing closed costs one delayed nudge; failing open costs a
+        // complaint we would deserve.
+        logger.error(`Unsubscribe check failed for ${to}: ${error?.message ?? error}`);
+        return { status: 'failed', error: `Unsubscribe check failed: ${error?.message}`, statusCode: null };
+      }
     }
 
     if (!config.email.enabled) {

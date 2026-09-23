@@ -39,6 +39,7 @@ function contextFor(language, overrides = {}) {
       iq_band: language === 'ja' ? '高い' : 'Superior',
       cta_url: SITE + '/' + language + '/result',
       hours_since_quiz: 26,
+      unsubscribe_url: SITE + '/email/unsubscribe?t=preview&lang=' + language,
       discount_code: 'BRAIN20',
       discount_percent: 20,
       login_email: 'customer@example.com',

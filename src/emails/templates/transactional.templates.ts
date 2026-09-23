@@ -286,7 +286,7 @@ const welcomeTemplate: EmailTemplate = {
         {
           html: ruleNote(
             language,
-            '<strong style="color:' +
+            '<strong class="e-ink" style="color:' +
               INK +
               ';">' +
               escapeHtml(copy.cancelLead) +
@@ -610,7 +610,7 @@ const passwordResetTemplate: EmailTemplate = {
         {
           html: ruleNote(
             language,
-            '<strong style="color:' +
+            '<strong class="e-ink" style="color:' +
               INK +
               ';">' +
               escapeHtml(copy.ignoreLead) +
@@ -768,7 +768,7 @@ const emailChangeConfirmTemplate: EmailTemplate = {
         {
           html: ruleNote(
             language,
-            '<strong style="color:' +
+            '<strong class="e-ink" style="color:' +
               INK +
               ';">' +
               escapeHtml(copy.ignoreLead) +
@@ -867,7 +867,7 @@ const emailChangeNoticeTemplate: EmailTemplate = {
           // on — if they need to act, they come to the site themselves.
           html: ruleNote(
             language,
-            '<strong style="color:' +
+            '<strong class="e-ink" style="color:' +
               INK +
               ';">' +
               escapeHtml(copy.alertLead) +

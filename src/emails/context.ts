@@ -38,6 +38,7 @@ export function createEmailContext(
     cta_url: required.site_url,
     site_url: required.site_url,
     hours_since_quiz: null,
+    unsubscribe_url: null,
     login_email: null,
     login_password: null,
     login_url: null,

@@ -42,6 +42,25 @@ export class Customer {
   @Column({ type: 'varchar', length: 50, default: 'inactive' })
   status!: string;
 
+  /**
+   * When they asked to stop receiving marketing email. NULL means they have not.
+   *
+   * A timestamp rather than a boolean so the answer to "when did I unsubscribe?"
+   * is in the row rather than in a log, and so it reads like the other
+   * one-way flags here (`password_set_at`) and on the subscription
+   * (`canceled_at`).
+   *
+   * Only the abandoned-checkout sequence honours it. Receipts, password resets
+   * and address-change confirmations are transactional and keep being sent —
+   * see the split enforced by template `category` in email.service.ts.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  marketing_unsubscribed_at!: Date | null;
+
+  /** How it happened — 'email_link', 'admin', 'support'. For people, not code. */
+  @Column({ type: 'varchar', length: 50, nullable: true })
+  marketing_unsubscribe_source!: string | null;
+
   @Column({ type: 'varchar', length: 255, nullable: true })
   stripe_customer_id!: string | null;
 

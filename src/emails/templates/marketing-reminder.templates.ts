@@ -215,7 +215,14 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
       'discount_code',
       'discount_percent',
       'cta_url',
-      'site_url'
+      'site_url',
+      'email',
+      // Every design in this file is marketing, so every one of them carries an
+      // opt-out. Declared here as well as used below, because a ZeptoMail-hosted
+      // copy of this template receives only what is declared — and an email that
+      // reaches the inbox without its unsubscribe link is the failure mode this
+      // list exists to prevent.
+      'unsubscribe_url'
     ],
     subject: { ja: copy.ja.subject, en: copy.en.subject },
     render(ctx: EmailTemplateContext): string {
@@ -247,6 +254,8 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
           ? discountPanel(ctx.language, ctx.discount_code, ctx.discount_percent)
           : '',
         footnote: asText(text.footnote),
+        recipientEmail: ctx.email,
+        unsubscribeUrl: ctx.unsubscribe_url ?? undefined,
         siteUrl: ctx.site_url
       });
     }

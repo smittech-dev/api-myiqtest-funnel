@@ -37,6 +37,15 @@ export interface EmailTemplateContext {
   site_url: string;
   /** Hours since the quiz was submitted, for copy that mentions elapsed time. */
   hours_since_quiz: number | null;
+  /**
+   * Where the footer's opt-out points, or null for a design that must not carry
+   * one.
+   *
+   * Null on every transactional message by construction — see
+   * `unsubscribeUrlFor` — because offering to stop sending receipts and
+   * password resets is offering something we will not honour.
+   */
+  unsubscribe_url: string | null;
 
   // --- account credentials (welcome email) -------------------------------
   // Only ever populated for the welcome message, and only on the send that

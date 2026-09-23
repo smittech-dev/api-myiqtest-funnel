@@ -10,6 +10,7 @@ import { config } from '../config/env.config.js';
 import { EmailMarketingLog } from '../entities/EmailMarketingLog.entity.js';
 import { createEmailContext, honorific } from '../emails/context.js';
 import type { EmailLanguage, EmailTemplateContext } from '../emails/email.types.js';
+import { unsubscribeUrlFor } from './email-unsubscribe.service.js';
 import { getTemplate } from '../emails/registry.js';
 import { emailService } from './email.service.js';
 import { AppError } from '../utils/app-error.util.js';
@@ -177,6 +178,12 @@ export class EmailMarketingService {
         JOIN customers c ON c.id = q.customer_id
         WHERE q.customer_id IS NOT NULL
           AND c.email_verified = TRUE
+          -- The opt-out, applied where it costs least: an unsubscribed customer
+          -- is never a candidate, so no step is claimed for them, no log row is
+          -- written, and the sequence simply stops rather than being skipped
+          -- one rung at a time. emailService.send checks again as a backstop
+          -- for any path that does not come through here.
+          AND c.marketing_unsubscribed_at IS NULL
           AND q.created_at <= NOW() - ($1 * INTERVAL '1 hour')
           AND q.created_at >= NOW() - ($2 * INTERVAL '1 hour')
           AND NOT EXISTS (
@@ -456,7 +463,10 @@ export class EmailMarketingService {
         discount_code: code,
         discount_percent: percent,
         cta_url: ctaUrl.toString(),
-        hours_since_quiz: Math.floor((Date.now() - candidate.created_at.getTime()) / 3_600_000)
+        hours_since_quiz: Math.floor((Date.now() - candidate.created_at.getTime()) / 3_600_000),
+        // Deterministic, so the link in rung four is the same one as in rung
+        // one and an old email still works. See email-unsubscribe.service.ts.
+        unsubscribe_url: unsubscribeUrlFor(candidate.customer_id, language)
       }
     );
   }
@@ -517,6 +527,11 @@ export class EmailMarketingService {
       templateId: input.templateId,
       to: input.to,
       toName: null,
+      // An operator asking to see a design in their own inbox has asked for it
+      // explicitly. Suppressing that because the address happens to belong to a
+      // customer who opted out would make the preview silently do nothing,
+      // which is the one thing a preview must not do.
+      ignoreUnsubscribe: true,
       // Every parameter any template might declare is filled with a sample, so
       // one endpoint can preview a marketing nudge and a transactional receipt
       // alike. The password is visibly fake — a preview must never be mistaken
@@ -531,6 +546,10 @@ export class EmailMarketingService {
           discount_percent: percent,
           cta_url: ctaUrl.toString(),
           hours_since_quiz: 24,
+          // A sample link, for the same reason as the quiz id above: the
+          // operator sees the footer as a customer will, and the link resolves
+          // to no real account, so a preview cannot opt anybody out.
+          unsubscribe_url: unsubscribeUrlFor('0', input.language),
           login_email: input.to,
           login_password: 'SAMP-LE00-TEST',
           login_url: config.brainTraining.loginUrl || siteUrl,
