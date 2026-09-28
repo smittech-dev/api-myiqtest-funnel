@@ -1,13 +1,52 @@
 import 'reflect-metadata';
 import { createApp } from './app.js';
-import { config } from './config/env.config.js';
+import { config, isLoopbackUrl } from './config/env.config.js';
 import { AppDataSource } from './config/database.config.js';
 import { logger } from './utils/logger.util.js';
 import { startCurrencyRateCron, stopCurrencyRateCron } from './jobs/currency-rate.job.js';
 import { startEmailMarketingCron, stopEmailMarketingCron } from './jobs/email-marketing.job.js';
 
+/**
+ * The settings that are only wrong once they are in someone's inbox.
+ *
+ * Everything else built from `APP_URL` is derived from the request or is a
+ * development aid, so a stale value stayed invisible. An unsubscribe link is
+ * not: it is printed into a message, delivered, and cannot be taken back. This
+ * says so at boot, where somebody is watching, rather than in a log line three
+ * weeks later.
+ *
+ * A warning and not a refusal to start. The API serving checkout is worth more
+ * than the marketing sequence, and that sequence already holds itself back —
+ * see the guard in email.service.ts — so the failure is contained either way.
+ */
+function warnAboutDeploymentUrls(): void {
+  if (config.env !== 'production') return;
+
+  if (isLoopbackUrl(config.appUrl)) {
+    logger.error('────────────────────────────────────────────────────────');
+    logger.error(`APP_URL is ${config.appUrl} on a production box.`);
+    logger.error('Set it to the public origin of this API, e.g. https://api.myiq-test.com');
+    logger.error('Until then, marketing email is held: its unsubscribe link');
+    logger.error('would point at the machine the customer is reading on.');
+    logger.error('────────────────────────────────────────────────────────');
+  }
+
+  // Same class of mistake, two variables along. Neither is fatal on its own,
+  // and both produce links a customer cannot follow.
+  for (const [name, value] of [
+    ['FUNNEL_URL', config.funnelUrl],
+    ['BOOST_APP_URL', config.boost.appUrl]
+  ] as const) {
+    if (isLoopbackUrl(value)) {
+      logger.warn(`${name} is ${value} on a production box — links built from it will not resolve.`);
+    }
+  }
+}
+
 async function bootstrap() {
   try {
+    warnAboutDeploymentUrls();
+
     // 1. Initialize Database Connection
     logger.info('Initializing PostgreSQL connection via TypeORM...');
     try {

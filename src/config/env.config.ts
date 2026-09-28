@@ -44,9 +44,31 @@ const funnelUrl = withoutTrailingSlash(
   process.env.FUNNEL_URL || process.env.FRONTEND_URL || 'http://localhost:3000'
 );
 
+/**
+ * Does this URL point back at the machine it is read on?
+ *
+ * Exported because two very different things need the answer, and both of them
+ * are about a default that nobody remembered to change: the Swagger server list
+ * hides a loopback `APP_URL` on a deployed box, and the unsubscribe link
+ * refuses to be built from one. The second is the reason this moved out of
+ * swagger.config.ts — a bad APP_URL used to be a cosmetic problem on a docs
+ * page, and is now a dead link printed into a customer's inbox, where it cannot
+ * be corrected after the fact.
+ */
+export const isLoopbackUrl = (url: string): boolean =>
+  /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:|\/|$)/i.test(url);
+
 export const config = {
   env: process.env.NODE_ENV || 'development',
   port: parseInt(process.env.PORT || '5000', 10),
+  /**
+   * The public origin of THIS api — the one a browser or a mail client will
+   * reach it on, not the one it binds to.
+   *
+   * Set it in every deployed environment. The default is a development
+   * convenience, and anything built from it that leaves the building — the
+   * unsubscribe link most of all — is wrong the moment it is wrong here.
+   */
   appUrl: process.env.APP_URL || 'http://localhost:5000',
   /** The quiz funnel's origin, already normalised — never has a trailing slash. */
   funnelUrl,

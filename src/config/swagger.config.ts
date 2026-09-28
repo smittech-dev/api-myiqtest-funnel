@@ -1,4 +1,4 @@
-import { config } from './env.config.js';
+import { config, isLoopbackUrl } from './env.config.js';
 import { adminPaths, adminSchemas } from './swagger.admin.js';
 
 /**
@@ -968,10 +968,7 @@ export function swaggerSpecFor(req: { protocol: string; get(name: string): strin
   // nobody remembered to change. That entry cannot work for any reader of a
   // deployed docs page, so offering it only invites someone to select it and
   // wonder why every call fails.
-  const appUrlIsLoopback = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(
-    config.appUrl
-  );
-  const hideAppUrl = config.env === 'production' && appUrlIsLoopback;
+  const hideAppUrl = config.env === 'production' && isLoopbackUrl(config.appUrl);
   if (config.appUrl && !hideAppUrl && !servers.some((s) => s.url === config.appUrl)) {
     servers.push({ url: config.appUrl, description: 'Configured APP_URL' });
   }

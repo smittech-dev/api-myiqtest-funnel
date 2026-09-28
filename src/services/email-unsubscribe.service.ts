@@ -1,5 +1,5 @@
 import { AppDataSource } from '../config/database.config.js';
-import { config } from '../config/env.config.js';
+import { config, isLoopbackUrl } from '../config/env.config.js';
 import { Customer } from '../entities/Customer.entity.js';
 import { getTemplate } from '../emails/registry.js';
 import type { EmailLanguage } from '../emails/email.types.js';
@@ -51,6 +51,21 @@ export function unsubscribeUrlFor(
   language: EmailLanguage = 'en'
 ): string | null {
   if (customerId === null || customerId === undefined || customerId === '') return null;
+
+  // A deployed box still carrying the development default would print
+  // `http://localhost:5000/email/unsubscribe?...` into a customer's inbox — a
+  // link that resolves to the reader's own machine and can never be corrected,
+  // because the message has already been delivered. Better to build nothing and
+  // let the caller refuse the send; see the marketing guard in email.service.ts.
+  if (config.env === 'production' && isLoopbackUrl(config.appUrl)) {
+    logger.error(
+      'APP_URL is still ' +
+        config.appUrl +
+        ' in production, so no usable unsubscribe link can be built. ' +
+        'Marketing email is being held until APP_URL names the public origin of this API.'
+    );
+    return null;
+  }
 
   try {
     const base = config.appUrl.replace(/\/+$/, '');

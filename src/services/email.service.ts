@@ -131,6 +131,33 @@ export class EmailService {
      * a receipt or a password reset is never suppressed: someone who opted out
      * of offers has not opted out of being told their password changed.
      */
+    if (template.category === 'marketing') {
+      /**
+       * A marketing email must carry a working opt-out, so a missing one stops
+       * the send rather than shipping without it.
+       *
+       * In practice this means one thing: `APP_URL` still holds the development
+       * default on a deployed box, so `unsubscribeUrlFor` refused to build a
+       * localhost link. Failing closed costs a delayed nudge and fixes itself
+       * the moment the variable is set. Failing open costs a batch of emails
+       * whose opt-out points at the reader's own machine — already delivered,
+       * and beyond correcting.
+       *
+       * Checked ahead of the opt-out lookup because it needs no database, and
+       * because a misconfigured box should say so before anything else.
+       */
+      if (!context.unsubscribe_url) {
+        logger.error(
+          `Email not sent to ${to}: template "${templateId}" is marketing and has no ` +
+            'unsubscribe link. Check that APP_URL names the public origin of this API.'
+        );
+        return {
+          status: 'skipped',
+          reason: 'No unsubscribe link could be built for this marketing email (check APP_URL).'
+        };
+      }
+    }
+
     if (template.category === 'marketing' && !input.ignoreUnsubscribe) {
       try {
         if (await isUnsubscribed(to)) {
