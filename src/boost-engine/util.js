@@ -36,12 +36,50 @@ export function rng(seed) {
 export const fmt = (n) =>
   Number.isInteger(n) ? n.toLocaleString('en-US') : String(Math.round(n * 100) / 100);
 
+/* ── two languages, one question ──────────────────────────────────────────
+ *
+ * Every question is generated once, in English, and carries its Japanese
+ * alongside. Nothing Japanese ever reaches the seeded generator: the draws,
+ * the dedupe and the answer index all run on the English, so a Japanese
+ * attempt is the same twenty questions in the same order with the answer in
+ * the same place. That is what lets the server mark an attempt without
+ * caring which language it was shown in, and a member switch language
+ * mid-quiz without their answers moving.
+ */
+
+const BI = Symbol('bilingual');
+
+/** Text in both languages. English drives generation; Japanese rides along. */
+export const bi = (en, ja) => ({ [BI]: true, en, ja });
+
+/** A string that reads the same in both languages, e.g. pure arithmetic. */
+export const same = (s) => bi(s, s);
+
+/**
+ * `v` with every `bi()` inside it resolved to one language. Walks arrays and
+ * plain objects (stimulus, study, shapes); anything else is returned as is.
+ */
+export function inLang(v, lang) {
+  if (v == null || typeof v !== 'object') return v;
+  if (v[BI]) return v[lang];
+  if (Array.isArray(v)) return v.map((x) => inLang(x, lang));
+  const out = {};
+  for (const k of Object.keys(v)) out[k] = inLang(v[k], lang);
+  return out;
+}
+
+/** The Japanese a question carries, in the shape `buildLevel` swaps in. */
+export const jaOf = (fields) => ({ ja: inLang(fields, 'ja') });
+
 /**
  * Build a four-option multiple choice from a correct value and candidate
  * distractors. Duplicates are dropped; `fill` supplies more if needed.
  */
 export function choice(r, { prompt, answer, distractors = [], fill, stimulus, study, render, explain }) {
-  const key = (v) => (typeof v === 'object' ? JSON.stringify(v) : String(v));
+  const key = (v) => {
+    const en = inLang(v, 'en');
+    return typeof en === 'object' ? JSON.stringify(en) : String(en);
+  };
   const seen = new Set([key(answer)]);
   const wrong = [];
   for (const d of r.shuffle(distractors)) {
@@ -60,13 +98,14 @@ export function choice(r, { prompt, answer, distractors = [], fill, stimulus, st
   const options = r.shuffle([answer, ...wrong]);
   return {
     type: 'choice',
-    prompt,
-    stimulus,
-    study,
+    prompt: inLang(prompt, 'en'),
+    stimulus: inLang(stimulus, 'en'),
+    study: inLang(study, 'en'),
     render: render || 'text',
-    options,
+    options: inLang(options, 'en'),
     answer: options.findIndex((o) => key(o) === key(answer)),
-    explain,
+    explain: inLang(explain, 'en'),
+    l10n: jaOf({ prompt, stimulus, study, options, explain }),
   };
 }
 

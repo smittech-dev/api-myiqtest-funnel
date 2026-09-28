@@ -1,6 +1,5 @@
 import Stripe from 'stripe';
 import { AppDataSource } from '../config/database.config.js';
-import { config } from '../config/env.config.js';
 import { stripe } from '../config/stripe.config.js';
 import { CustomerSubscription } from '../entities/CustomerSubscription.entity.js';
 import { CustomerQuizResult } from '../entities/CustomerQuizResult.entity.js';
@@ -9,6 +8,7 @@ import { BoostProfile } from '../entities/BoostProfile.entity.js';
 import { SUBSCRIPTION_INTERVAL_DAYS } from '../constants/pricing.constants.js';
 import { ms } from '../utils/boost-date.util.js';
 import { BoostError } from '../utils/boost-response.util.js';
+import { boostAppUrl, type BoostLocale } from '../utils/boost-locale.util.js';
 import { logger } from '../utils/logger.util.js';
 import { readSubscriptionPeriod } from '../utils/stripe-period.util.js';
 import type { SubscriptionDto } from '../types/boost.types.js';
@@ -372,7 +372,10 @@ export async function resumeSubscription(customerId: string): Promise<CustomerSu
  * customer id on the caller's own row, so a link cannot be minted for anyone
  * else.
  */
-export async function createBillingPortalSession(customerId: string): Promise<string> {
+export async function createBillingPortalSession(
+  customerId: string,
+  locale: BoostLocale = 'en'
+): Promise<string> {
   const record = await requireStripeSubscription(customerId);
 
   if (!record.stripe_customer_id) {
@@ -384,9 +387,12 @@ export async function createBillingPortalSession(customerId: string): Promise<st
   }
 
   try {
+    // Stripe's page and the page it returns to are both in the member's
+    // language. English keeps Stripe's own default, which follows the browser.
     const session = await stripe.billingPortal.sessions.create({
       customer: record.stripe_customer_id,
-      return_url: `${config.boost.appUrl.replace(/\/+$/, '')}/app/subscription`
+      return_url: boostAppUrl('/app/subscription', locale),
+      ...(locale === 'ja' ? { locale: 'ja' as const } : {})
     });
 
     return session.url;

@@ -72,3 +72,12 @@ export const TRAITS = {
 };
 
 export const LIKERT = ['Strongly disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly agree'];
+
+/** The same five points, worded the way Japanese inventories put them. */
+export const LIKERT_JA = [
+  'まったく当てはまらない',
+  'あまり当てはまらない',
+  'どちらともいえない',
+  'やや当てはまる',
+  'とても当てはまる',
+];

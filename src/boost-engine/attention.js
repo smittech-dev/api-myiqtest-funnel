@@ -1,4 +1,4 @@
-import { choice } from './util.js';
+import { bi, choice, jaOf } from './util.js';
 
 /**
  * Attention and focus: counting targets among look-alikes, comparing codes
@@ -62,11 +62,11 @@ const T = {
       ...Array.from({ length: total - n }, () => r.pick(others)),
     ]);
     return choice(r, {
-      prompt: `How many “${target}” are in the grid?`,
+      prompt: bi(`How many “${target}” are in the grid?`, `マス目の中に「${target}」はいくつありますか？`),
       stimulus: { kind: 'glyphs', cols: p.grid, items },
       answer: String(n),
       distractors: [n - 1, n + 1, n - 2, n + 2].filter((v) => v >= 0).map(String),
-      explain: `There are ${n}.`,
+      explain: bi(`There are ${n}.`, `${n}個あります。`),
       render: 'mono',
     });
   },
@@ -77,11 +77,14 @@ const T = {
     const b = mutate(r, a, diffs, p.confuse);
     const real = [...a].filter((c, i) => c !== b[i]).length;
     return choice(r, {
-      prompt: 'How many characters are different between the two codes?',
+      prompt: bi('How many characters are different between the two codes?', '2つのコードで異なる文字はいくつありますか？'),
       stimulus: { kind: 'codes', items: [a, b] },
       answer: String(real),
       distractors: ['0', '1', '2', '3', '4'],
-      explain: real === 0 ? 'The codes are identical.' : `${real} position${real > 1 ? 's differ' : ' differs'}.`,
+      explain:
+        real === 0
+          ? bi('The codes are identical.', '2つのコードはまったく同じです。')
+          : bi(`${real} position${real > 1 ? 's differ' : ' differs'}.`, `${real}か所が異なります。`),
       render: 'mono',
     });
   },
@@ -91,15 +94,21 @@ const T = {
     const odd = mutate(r, base, 1, p.confuse);
     const at = r.int(0, 3);
     const items = LABELS.map((_, i) => (i === at ? odd : base));
+    const prompt = bi('Which code is different from the other three?', 'ほかの3つと異なるコードはどれですか？');
+    const explain = bi(
+      `Code ${LABELS[at]} is ${odd}; the others are ${base}.`,
+      `コード${LABELS[at]}は ${odd} で、ほかの3つは ${base} です。`,
+    );
     // Letters stay in order — shuffling A–D would make the labels meaningless.
     return {
       type: 'choice',
-      prompt: 'Which code is different from the other three?',
+      prompt: prompt.en,
       stimulus: { kind: 'codes', items, labels: LABELS },
       options: LABELS,
       answer: at,
       render: 'mono',
-      explain: `Code ${LABELS[at]} is ${odd}; the others are ${base}.`,
+      explain: explain.en,
+      l10n: jaOf({ prompt, explain }),
     };
   },
 
@@ -115,12 +124,13 @@ const T = {
       if (i === at) line[r.int(0, p.grid - 1)] = target;
       items.push(...line);
     }
+    const row = (i) => bi(`Row ${i + 1}`, `${i + 1}行目`);
     return choice(r, {
-      prompt: `Which row contains the letter “${target}”?`,
+      prompt: bi(`Which row contains the letter “${target}”?`, `「${target}」の文字がある行はどれですか？`),
       stimulus: { kind: 'glyphs', cols: p.grid, items, rowLabels: true },
-      answer: `Row ${at + 1}`,
-      distractors: [...Array(rows).keys()].filter((i) => i !== at).map((i) => `Row ${i + 1}`),
-      explain: `“${target}” is in row ${at + 1}.`,
+      answer: row(at),
+      distractors: [...Array(rows).keys()].filter((i) => i !== at).map(row),
+      explain: bi(`“${target}” is in row ${at + 1}.`, `「${target}」は${at + 1}行目にあります。`),
     });
   },
 
@@ -130,11 +140,14 @@ const T = {
     const items = r.shuffle([...Array(n).keys()].map((i) => i + 1).filter((v) => v !== gone));
     const cols = Math.ceil(Math.sqrt(n - 1));
     return choice(r, {
-      prompt: `Every number from 1 to ${n} appears once — except one. Which is missing?`,
+      prompt: bi(
+        `Every number from 1 to ${n} appears once — except one. Which is missing?`,
+        `1から${n}までの数が1回ずつ並んでいますが、1つだけ抜けています。抜けている数はどれですか？`,
+      ),
       stimulus: { kind: 'glyphs', cols, items: items.map(String) },
       answer: String(gone),
       distractors: r.sample(items, 5).map(String),
-      explain: `${gone} is missing.`,
+      explain: bi(`${gone} is missing.`, `抜けているのは${gone}です。`),
       render: 'mono',
     });
   },

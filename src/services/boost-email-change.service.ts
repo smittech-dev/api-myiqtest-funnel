@@ -9,6 +9,7 @@ import { CustomerSubscription } from '../entities/CustomerSubscription.entity.js
 import { BoostEmailChange } from '../entities/BoostEmailChange.entity.js';
 import { PasswordUtil } from '../utils/password.util.js';
 import { BoostError } from '../utils/boost-response.util.js';
+import { boostAppUrl } from '../utils/boost-locale.util.js';
 import { logger } from '../utils/logger.util.js';
 import { emailService } from './email.service.js';
 import { createEmailContext, honorific } from '../emails/context.js';
@@ -166,7 +167,8 @@ export async function requestEmailChange(
   }
 
   const { language, firstName } = await languageFor(customerId);
-  const confirmUrl = `${config.boost.appUrl.replace(/\/+$/, '')}/confirm-email?token=${token}`;
+  // The page the link opens is in the email's language: /ja for Japanese.
+  const confirmUrl = boostAppUrl(`/confirm-email?token=${token}`, language);
 
   const base = (recipient: string) =>
     createEmailContext(

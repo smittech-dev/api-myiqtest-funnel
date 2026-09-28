@@ -17,6 +17,7 @@ import {
   submitRun
 } from '../services/boost-games.service.js';
 import { BoostError } from '../utils/boost-response.util.js';
+import { requestLocale } from '../utils/boost-locale.util.js';
 
 /**
  * The `:id` path parameter, as a string.
@@ -37,6 +38,11 @@ const slugOf = (req: Request): string =>
  * Every handler resolves the member's timezone first, because every rule this
  * module enforces — the daily limit, expiry at midnight, the streak — is stated
  * in the member's own calendar day rather than the server's.
+ *
+ * Handlers that return questions also read the language the app is showing
+ * (`Accept-Language`). It changes the wording of the questions and nothing
+ * else: the same seed gives the same questions, in the same order, with the
+ * same answer key, in either language.
  */
 export class BoostQuizController {
   /** GET /boost — categories, level statuses and what today looks like. */
@@ -71,7 +77,13 @@ export class BoostQuizController {
       const { profile } = await loadMember(req.member!.customerId);
       const { category, level } = req.body ?? {};
 
-      const result = await startAttempt(profile.customer_id, profile.timezone, category, level);
+      const result = await startAttempt(
+        profile.customer_id,
+        profile.timezone,
+        category,
+        level,
+        requestLocale(req)
+      );
       BoostResponse.ok(res, result);
     } catch (error) {
       next(error);
@@ -82,7 +94,10 @@ export class BoostQuizController {
   static async current(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { profile } = await loadMember(req.member!.customerId);
-      BoostResponse.ok(res, await getCurrentAttempt(profile.customer_id, profile.timezone));
+      BoostResponse.ok(
+        res,
+        await getCurrentAttempt(profile.customer_id, profile.timezone, requestLocale(req))
+      );
     } catch (error) {
       next(error);
     }
@@ -91,7 +106,7 @@ export class BoostQuizController {
   /** GET /boost/attempts/:id — any of the member's own attempts. Practice opens this way. */
   static async byId(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      BoostResponse.ok(res, await getAttempt(req.member!.customerId, attemptIdOf(req)));
+      BoostResponse.ok(res, await getAttempt(req.member!.customerId, attemptIdOf(req), requestLocale(req)));
     } catch (error) {
       next(error);
     }
@@ -123,7 +138,8 @@ export class BoostQuizController {
         profile.customer_id,
         profile.timezone,
         attemptIdOf(req),
-        req.body?.answers
+        req.body?.answers,
+        requestLocale(req)
       );
 
       BoostResponse.ok(res, outcome);

@@ -9,6 +9,7 @@ import { BoostProfile } from '../entities/BoostProfile.entity.js';
 import { PasswordUtil } from '../utils/password.util.js';
 import { BoostJwtUtil } from '../utils/boost-jwt.util.js';
 import { BoostError } from '../utils/boost-response.util.js';
+import { boostAppUrl } from '../utils/boost-locale.util.js';
 import { logger } from '../utils/logger.util.js';
 import { emailService } from './email.service.js';
 import { createEmailContext, honorific } from '../emails/context.js';
@@ -146,12 +147,11 @@ export async function requestPasswordReset(rawEmail: unknown, ip: string | null)
     order: { created_at: 'DESC' }
   });
 
-  // The members' area is English-only, but the customer knows us from the
-  // funnel — replying in the language they bought in is less jarring than
-  // switching on them mid-relationship.
+  // Replying in the language they bought in, and linking to the members' area
+  // in that same language — a Japanese email should not open an English page.
   const language: EmailLanguage = quizResult?.language?.toLowerCase() === 'en' ? 'en' : 'ja';
   const siteUrl = config.funnelUrl;
-  const resetUrl = `${config.boost.appUrl.replace(/\/+$/, '')}/reset-password?token=${token}`;
+  const resetUrl = boostAppUrl(`/reset-password?token=${token}`, language);
 
   const context = createEmailContext(
     { email: customer.email, language, site_url: siteUrl },

@@ -150,6 +150,40 @@ for (const c of CATEGORIES) {
   if (partial.passed) fail('scoring: a partly answered personality level passed');
 }
 
+/* ── Japanese ─────────────────────────────────────────────────────────────── */
+
+// The app asks for Japanese questions with Accept-Language. The same seed must
+// give the same questions with the answer in the same place — attempts are
+// marked by index, whatever language they were shown in — and a Japanese
+// question must leak no more than an English one does.
+let jaBuilt = 0;
+for (const c of CATEGORIES) {
+  for (const { level } of LEVELS) {
+    for (let s = 0; s < SEEDS; s++) {
+      const where = `ja ${c.key} L${level} seed${s}`;
+      const en = buildLevel(c.key, level, `j${s}`);
+      const ja = buildLevel(c.key, level, `j${s}`, 'ja');
+      jaBuilt++;
+      if (ja.length !== en.length) fail(`${where}: ${ja.length} questions, English has ${en.length}`);
+      ja.forEach((q, i) => {
+        const e = en[i];
+        if (q.id !== e.id || q.answer !== e.answer || q.options.length !== e.options.length || q.key !== e.key) {
+          fail(`${where} ${q.id}: differs from the English question beyond its words`);
+        }
+        if ('l10n' in q) fail(`${where} ${q.id}: generator bookkeeping (l10n) left on the question`);
+        const sent = toClient(q);
+        for (const banned of [...LEAKED, 'l10n']) {
+          if (banned in sent) fail(`LEAK: ${where} ${q.id} — toClient() exposed "${banned}"`);
+        }
+      });
+      const answers = Object.fromEntries(en.map((q) => [q.id, q.type === 'likert' ? 2 : q.answer]));
+      if (scoreAttempt(c.key, ja, answers).correct !== scoreAttempt(c.key, en, answers).correct) {
+        fail(`${where}: the same answers score differently in Japanese`);
+      }
+    }
+  }
+}
+
 /* ── report ───────────────────────────────────────────────────────────────── */
 
 if (problems.length) {
@@ -161,5 +195,6 @@ if (problems.length) {
 
 console.log(`- generated ${built} levels across ${CATEGORIES.length} categories × ${LEVELS.length} levels × ${SEEDS} seeds`);
 console.log(`- no answer key reachable through toClient()`);
+console.log(`- ${jaBuilt} Japanese levels identical to their English twins bar the words`);
 console.log(`- pass mark ${PASS_MARK}/${QUESTIONS_PER_LEVEL}`);
 console.log('\n✓ boost engine OK');

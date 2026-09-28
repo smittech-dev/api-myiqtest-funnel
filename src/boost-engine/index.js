@@ -32,8 +32,31 @@ const GENERATORS = { numerical, pattern, memory, attention, verbal };
 
 const fingerprint = (q) => JSON.stringify([q.prompt, q.stimulus, q.study]);
 
-/** Build the twenty questions for one attempt. Deterministic for a seed. */
-export function buildLevel(category, level, seed) {
+export const QUIZ_LOCALES = ['en', 'ja'];
+
+/**
+ * A generated question in one language.
+ *
+ * Generators write English and carry their Japanese in `l10n` (see `bi()` in
+ * util.js). Only the text is swapped — `answer`, `trait` and `key` are never
+ * in `l10n`, so the answer key is the same whichever language is shown.
+ * `l10n` itself is always dropped: it is generator bookkeeping, not part of a
+ * question.
+ */
+function localise(q, locale) {
+  const { l10n, ...rest } = q;
+  const text = locale !== 'en' ? l10n?.[locale] : null;
+  if (!text) return rest;
+  for (const k of Object.keys(text)) if (text[k] !== undefined) rest[k] = text[k];
+  return rest;
+}
+
+/**
+ * Build the twenty questions for one attempt. Deterministic for a seed, and
+ * the same questions in every locale — `locale` changes the words, never the
+ * questions, their order or which option is right.
+ */
+export function buildLevel(category, level, seed, locale = 'en') {
   const r = rng(`${category}:${level}:${seed}`);
 
   const questions =
@@ -54,7 +77,7 @@ export function buildLevel(category, level, seed) {
           return out;
         })();
 
-  return questions.map((q, i) => ({ ...q, id: `q${i + 1}`, category, level }));
+  return questions.map((q, i) => localise({ ...q, id: `q${i + 1}`, category, level }, locale));
 }
 
 /** Strip everything that would give the answer away. */

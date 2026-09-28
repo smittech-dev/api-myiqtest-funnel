@@ -75,9 +75,11 @@ export async function ensureBoostProfile(customer: Customer): Promise<BoostProfi
     full_name: fullNameOf(quizResult),
     birth_year: birthYearFromAge(quizResult?.age ?? null),
     region: null,
-    // The members' area is English-only for now; the funnel's `language` is
-    // about the funnel's own copy, not this app's.
-    locale: 'en',
+    // The members' area is in English and Japanese. A member starts in the
+    // language they bought in — the same rule the emails follow, so the welcome
+    // email and the app it links to agree. They can switch in the app, which
+    // updates this through PATCH /me.
+    locale: quizResult?.language?.toLowerCase() === 'en' ? 'en' : 'ja',
     timezone: timezoneForCountry(quizResult?.country_code),
     // The certificate they bought is where their estimated IQ starts.
     baseline_iq: quizResult?.iq_score ?? 100,

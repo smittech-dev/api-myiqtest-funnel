@@ -3,6 +3,7 @@ import { AppDataSource } from '../config/database.config.js';
 import { BoostProfile, DEFAULT_NOTIFICATIONS } from '../entities/BoostProfile.entity.js';
 import { BoostResponse, BoostError } from '../utils/boost-response.util.js';
 import { isValidTimezone } from '../utils/boost-date.util.js';
+import { requestLocale } from '../utils/boost-locale.util.js';
 import { loadMember, toUserDto } from '../services/boost-profile.service.js';
 import {
   cancelSubscription,
@@ -287,7 +288,7 @@ export class BoostAccountController {
    */
   static async billingPortal(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const url = await createBillingPortalSession(req.member!.customerId);
+      const url = await createBillingPortalSession(req.member!.customerId, requestLocale(req));
       BoostResponse.ok(res, { url });
     } catch (error) {
       next(error);

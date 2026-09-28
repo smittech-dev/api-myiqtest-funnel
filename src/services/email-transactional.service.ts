@@ -13,6 +13,7 @@ import { generateCustomerPassword } from '../utils/customer-password.util.js';
 import { reportUrlFor } from '../utils/report-url.util.js';
 import { logger } from '../utils/logger.util.js';
 import { PasswordUtil } from '../utils/password.util.js';
+import { inBoostLocale } from '../utils/boost-locale.util.js';
 
 /**
  * The transactional emails a paying customer receives.
@@ -82,7 +83,9 @@ export class EmailTransactionalService {
       // than an account nobody can sign in to.
       const password = await this.ensurePassword(customer);
 
-      const loginUrl = config.brainTraining.loginUrl || this.siteUrl();
+      // The sign-in page in the email's language: a Japanese welcome opens the
+      // Japanese members' area (/ja/login), an English one the English page.
+      const loginUrl = inBoostLocale(config.brainTraining.loginUrl, language) || this.siteUrl();
       if (!config.brainTraining.loginUrl) {
         logger.warn(
           'BRAIN_TRAINING_LOGIN_URL is not set — the welcome email points at the funnel instead.'

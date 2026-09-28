@@ -55,6 +55,15 @@ export interface LevelMeta {
   name: string;
 }
 
+/**
+ * The languages a quiz can be built in. The generators write every question
+ * in both and keep the answer in the same place, so the locale changes the
+ * words a member reads and nothing else — not the questions, not their order,
+ * not which option is right. Marking never depends on it.
+ */
+export type QuizLocale = 'en' | 'ja';
+export const QUIZ_LOCALES = engine.QUIZ_LOCALES as QuizLocale[];
+
 export const CATEGORIES: CategoryMeta[] = engine.CATEGORIES;
 export const CATEGORY_BY_KEY: Record<string, CategoryMeta> = engine.CATEGORY_BY_KEY;
 export const LEVELS: LevelMeta[] = engine.LEVELS;
@@ -63,10 +72,16 @@ export const QUESTIONS_PER_LEVEL: number = engine.QUESTIONS_PER_LEVEL;
 
 /**
  * The twenty questions for one attempt. Deterministic: the same seed always
- * rebuilds the same set, which is why only the seed is stored.
+ * rebuilds the same set, which is why only the seed is stored — and why the
+ * seed alone is enough to show an attempt in either language.
  */
-export function buildLevel(category: string, level: number, seed: string): ServerQuestion[] {
-  return engine.buildLevel(category, level, seed) as ServerQuestion[];
+export function buildLevel(
+  category: string,
+  level: number,
+  seed: string,
+  locale: QuizLocale = 'en'
+): ServerQuestion[] {
+  return engine.buildLevel(category, level, seed, locale) as ServerQuestion[];
 }
 
 /**

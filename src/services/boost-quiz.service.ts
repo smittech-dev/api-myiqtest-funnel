@@ -19,6 +19,7 @@ import {
   QUESTIONS_PER_LEVEL,
   isKnownCategory,
   isKnownLevel,
+  type QuizLocale,
   type ServerQuestion
 } from '../utils/boost-engine.util.js';
 import type {
@@ -151,8 +152,14 @@ function todayStateFrom(dateKey: string, attempt: BoostAttempt | null): TodaySta
 
 /* ── serialising an attempt for the client ────────────────────────────────── */
 
-const questionsOf = (attempt: BoostAttempt): ServerQuestion[] =>
-  buildLevel(attempt.category, attempt.level, attempt.seed);
+/**
+ * The attempt's questions, in the language the member is reading. The seed
+ * decides the questions and the answer key; the locale only the words — so
+ * an attempt started in English can be resumed, submitted or reviewed in
+ * Japanese and every stored answer still points at the right option.
+ */
+const questionsOf = (attempt: BoostAttempt, locale: QuizLocale): ServerQuestion[] =>
+  buildLevel(attempt.category, attempt.level, attempt.seed, locale);
 
 /**
  * The attempt as the client may see it.
@@ -161,7 +168,7 @@ const questionsOf = (attempt: BoostAttempt): ServerQuestion[] =>
  * locally, run the generator's own answer key over them and submit a perfect
  * score. It is the single most important field never to serialise.
  */
-function toClientAttempt(attempt: BoostAttempt, withQuestions: boolean): ClientAttempt {
+function toClientAttempt(attempt: BoostAttempt, withQuestions: boolean, locale: QuizLocale): ClientAttempt {
   const base: ClientAttempt = {
     id: attempt.public_id,
     category: attempt.category,
@@ -174,7 +181,7 @@ function toClientAttempt(attempt: BoostAttempt, withQuestions: boolean): ClientA
   if (attempt.is_practice) base.practice = true;
 
   if (withQuestions) {
-    base.questions = questionsOf(attempt).map(toClient);
+    base.questions = questionsOf(attempt, locale).map(toClient);
     // Where the member was, so a resume on another device lands in the right
     // place with the answers they already gave.
     base.progress = {
@@ -269,7 +276,8 @@ export async function startAttempt(
   customerId: string,
   timezone: string,
   rawCategory: unknown,
-  rawLevel: unknown
+  rawLevel: unknown,
+  locale: QuizLocale = 'en'
 ): Promise<StartResult> {
   const category = String(rawCategory ?? '');
   const level = Number(rawLevel);
@@ -288,7 +296,7 @@ export async function startAttempt(
   //    today's quiz is used. Practice spends no daily slot and earns nothing,
   //    so it cannot be farmed for the leaderboard.
   if (levelStatus(progress, category, level) === 'completed') {
-    return startPractice(customerId, timezone, category, level, dateKey);
+    return startPractice(customerId, timezone, category, level, dateKey, locale);
   }
 
   // 2. The daily slot. Checked before the lock, deliberately: a member who has
@@ -300,7 +308,7 @@ export async function startAttempt(
 
     if (todays.status === 'in_progress') {
       if (todays.category === category && todays.level === level) {
-        return { resumed: true, attempt: toClientAttempt(todays, true) };
+        return { resumed: true, attempt: toClientAttempt(todays, true, locale) };
       }
       throw new BoostError(
         409,
@@ -353,7 +361,7 @@ export async function startAttempt(
 
   try {
     const saved = await attemptRepo().save(attempt);
-    return { resumed: false, attempt: toClientAttempt(saved, true) };
+    return { resumed: false, attempt: toClientAttempt(saved, true, locale) };
   } catch (error: any) {
     if (!isUniqueViolation(error)) throw error;
 
@@ -361,7 +369,7 @@ export async function startAttempt(
     // (customer_id, date_key) settled it; whoever lost re-reads the winner.
     const winner = await findTodaysAttempt(customerId, dateKey);
     if (winner && winner.category === category && winner.level === level) {
-      return { resumed: true, attempt: toClientAttempt(winner, true) };
+      return { resumed: true, attempt: toClientAttempt(winner, true, locale) };
     }
     throw new BoostError(
       409,
@@ -385,7 +393,8 @@ async function startPractice(
   timezone: string,
   category: string,
   level: number,
-  dateKey: string
+  dateKey: string,
+  locale: QuizLocale
 ): Promise<StartResult> {
   const open = await attemptRepo().findOne({
     where: { customer_id: customerId, is_practice: true, status: 'in_progress' },
@@ -394,7 +403,7 @@ async function startPractice(
 
   if (open && open.expires_at.getTime() > Date.now()) {
     if (open.category === category && open.level === level) {
-      return { resumed: true, attempt: toClientAttempt(open, true) };
+      return { resumed: true, attempt: toClientAttempt(open, true, locale) };
     }
   }
 
@@ -424,7 +433,7 @@ async function startPractice(
   });
 
   const saved = await attemptRepo().save(attempt);
-  return { resumed: false, attempt: toClientAttempt(saved, true) };
+  return { resumed: false, attempt: toClientAttempt(saved, true, locale) };
 }
 
 /** Counts the start and returns the row, creating it the first time. */
@@ -476,7 +485,7 @@ async function ownedAttempt(customerId: string, attemptPublicId: string): Promis
   return attempt;
 }
 
-export async function getCurrentAttempt(customerId: string, timezone: string) {
+export async function getCurrentAttempt(customerId: string, timezone: string, locale: QuizLocale = 'en') {
   const dateKey = dateKeyIn(timezone);
   const attempt = await findTodaysAttempt(customerId, dateKey);
 
@@ -485,26 +494,26 @@ export async function getCurrentAttempt(customerId: string, timezone: string) {
   }
 
   await closeIfLapsed(attempt);
-  return attemptPayload(attempt);
+  return attemptPayload(attempt, locale);
 }
 
-export async function getAttempt(customerId: string, attemptPublicId: string) {
+export async function getAttempt(customerId: string, attemptPublicId: string, locale: QuizLocale = 'en') {
   const attempt = await ownedAttempt(customerId, attemptPublicId);
   await closeIfLapsed(attempt);
-  return attemptPayload(attempt);
+  return attemptPayload(attempt, locale);
 }
 
 /** Questions while it is open, the result once it is done — so a reload works either way. */
-function attemptPayload(attempt: BoostAttempt) {
+function attemptPayload(attempt: BoostAttempt, locale: QuizLocale) {
   if (attempt.status === 'submitted') {
-    return { attempt: toClientAttempt(attempt, false), result: rebuildResult(attempt) };
+    return { attempt: toClientAttempt(attempt, false, locale), result: rebuildResult(attempt, locale) };
   }
 
   if (attempt.status !== 'in_progress') {
     throw new BoostError(410, 'attempt_closed', 'This attempt is no longer open.');
   }
 
-  return { attempt: toClientAttempt(attempt, true), result: null };
+  return { attempt: toClientAttempt(attempt, true, locale), result: null };
 }
 
 /**
@@ -515,8 +524,8 @@ function attemptPayload(attempt: BoostAttempt) {
  * the answers are already on the row, storing it would be keeping a copy of
  * something we can always derive.
  */
-function rebuildResult(attempt: BoostAttempt): AttemptResult {
-  const questions = questionsOf(attempt);
+function rebuildResult(attempt: BoostAttempt, locale: QuizLocale): AttemptResult {
+  const questions = questionsOf(attempt, locale);
   const scored = scoreAttempt(attempt.category, questions, attempt.answers ?? {});
 
   return {
@@ -617,7 +626,8 @@ export async function submitAttempt(
   customerId: string,
   timezone: string,
   attemptPublicId: string,
-  rawAnswers: unknown
+  rawAnswers: unknown,
+  locale: QuizLocale = 'en'
 ): Promise<SubmitOutcome> {
   const attempt = await ownedAttempt(customerId, attemptPublicId);
   assertOpen(attempt);
@@ -638,7 +648,7 @@ export async function submitAttempt(
 
   // Rebuilt from the seed, here on the server. The client's answers are indices;
   // what they are indices *into* is decided here and nowhere else.
-  const questions = questionsOf(attempt);
+  const questions = questionsOf(attempt, locale);
   const scored = scoreAttempt(attempt.category, questions, answers);
 
   const progress = await loadProgress(customerId);
