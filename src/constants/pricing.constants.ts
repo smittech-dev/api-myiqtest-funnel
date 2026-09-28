@@ -68,7 +68,7 @@ export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
   ja: {
     currency: 'JPY',
     first_sale: {
-      amount: 300,
+      amount: 199,
       currency: 'JPY',
       stripe_amount: 199, // Zero-decimal in Stripe
       title: '公式IQ認定証＋詳細診断レポート',
