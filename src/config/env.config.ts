@@ -119,7 +119,7 @@ export const config = {
     // ZeptoMail prints next to the token in its console.
     token: process.env.ZEPTOMAIL_TOKEN || '',
     fromAddress: process.env.ZEPTOMAIL_FROM_ADDRESS || '',
-    fromName: process.env.ZEPTOMAIL_FROM_NAME || 'MyIQTest',
+    fromName: process.env.ZEPTOMAIL_FROM_NAME || 'myIQ Test',
     replyTo: process.env.ZEPTOMAIL_REPLY_TO || '',
     requestTimeoutMs: parseInt(process.env.EMAIL_REQUEST_TIMEOUT_MS || '10000', 10),
     // Renders and logs the message without handing it to the provider. A
