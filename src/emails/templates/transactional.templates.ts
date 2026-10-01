@@ -137,7 +137,7 @@ const WELCOME_COPY: Record<EmailLanguage, WelcomeCopy> = {
     headline: 'Welcome to the {{program_name}}.',
     lede: 'Your assessment told you where your reasoning stands today. The training program is the part that moves it — short daily sets, aimed at the domains your own report marked as weakest. Full access starts now.',
     ctaTitle: 'Your first session is waiting',
-    ctaLabel: 'Boost My IQ',
+    ctaLabel: 'Boost myIQ',
     ctaNote: 'Around ten minutes a day is enough.',
     includedEyebrow: 'What you have access to',
     includedTitle: 'Everything, from day one',
