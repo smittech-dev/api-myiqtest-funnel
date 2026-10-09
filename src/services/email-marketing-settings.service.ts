@@ -6,7 +6,13 @@ import { EmailMarketingSetting } from '../entities/EmailMarketingSetting.entity.
 // validated shape the rest of the application passes around. Same concept, two
 // representations, and this is the one file that has to hold both.
 import { EmailMarketingStep as EmailMarketingStepRow } from '../entities/EmailMarketingStep.entity.js';
-import { getTemplate, listTemplates, templateExists } from '../emails/registry.js';
+import type { EmailTemplate } from '../emails/email.types.js';
+import {
+  getTemplate,
+  listTemplates,
+  providerTemplateKey,
+  templateExists
+} from '../emails/registry.js';
 import { logger } from '../utils/logger.util.js';
 
 /**
@@ -91,19 +97,18 @@ export const emailMarketingConfigSchema = z
         });
       }
 
-      // A design that writes the discount into its copy cannot be sent without
-      // one — the customer would receive "%OFF" and an offer with no code.
-      // Tied to the template's declared parameters rather than made a blanket
-      // rule, so a plain reminder template can still be scheduled with no
-      // discount attached.
+      // A design that can only print the discount cannot be sent without one —
+      // the customer would receive "%OFF" and an offer with no code.
       const template = getTemplate(step.template_id);
-      const needsDiscount = template?.params.includes('discount_percent') ?? false;
 
-      if (step.enabled && needsDiscount && !step.discount_code) {
+      if (step.enabled && !step.discount_code && template && templateRequiresDiscount(template)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ['steps', index, 'discount_code'],
-          message: `The "${template?.name ?? step.template_id}" template writes the discount into its copy — pick a code, or choose a template that does not need one.`
+          message:
+            providerTemplateKey(template.id) !== null
+              ? `The "${template.name}" template is rendered by ZeptoMail, and its copy there prints the discount — pick a code.`
+              : `The "${template.name}" template writes the discount into its copy — pick a code, or choose a template that does not need one.`
         });
       }
     });
@@ -371,6 +376,18 @@ export function enabledStepsInOrder(cfg: EmailMarketingConfig): EmailMarketingSt
 }
 
 /**
+ * Whether a design cannot go out without a discount code.
+ *
+ * True for a design that prints the discount and has no copy for sending
+ * without one — and for any such design ZeptoMail renders, because the hosted
+ * copy cannot switch: it would merge an empty percent and read "% off".
+ */
+export function templateRequiresDiscount(template: EmailTemplate): boolean {
+  if (!template.params.includes('discount_percent')) return false;
+  return !template.subjectWithoutDiscount || providerTemplateKey(template.id) !== null;
+}
+
+/**
  * The two catalogues the admin editor's dropdowns are built from. Served
  * alongside the settings so the panel can never offer a template or code the
  * save would then reject.
@@ -389,7 +406,9 @@ export function getEmailMarketingOptions() {
       description: t.description,
       category: t.category,
       params: [...t.params],
-      subject: t.subject
+      subject: t.subject,
+      // Lets the step editor offer "No discount" only where the save accepts it.
+      requires_discount: templateRequiresDiscount(t)
     })),
     discount_codes: Object.values(discountCodes)
       .map((entry) => ({ code: entry.code, discount: entry.discount }))

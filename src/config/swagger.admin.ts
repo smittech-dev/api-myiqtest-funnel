@@ -147,6 +147,12 @@ export const adminSchemas = {
         description:
           'True when ZEPTOMAIL_TEMPLATE_<ID> is set, meaning ZeptoMail renders the design and editing the copy in this repo has no effect.',
         example: false
+      },
+      requires_discount: {
+        type: 'boolean',
+        description:
+          'True when an enabled step using this design must have a discount code. The reminder designs carry copy for sending without one, so this is false for them unless ZeptoMail renders them.',
+        example: false
       }
     }
   },

@@ -4,7 +4,8 @@ import {
   getTemplate,
   mergeInfoFor,
   providerTemplateKey,
-  renderTemplate
+  renderTemplate,
+  subjectSource
 } from '../emails/registry.js';
 import { externalApiLogService, EXTERNAL_API_SERVICE } from './external-api-log.service.js';
 import { isUnsubscribed } from './email-unsubscribe.service.js';
@@ -212,7 +213,7 @@ export class EmailService {
     let subject: string;
 
     if (hostedKey) {
-      subject = template.subject[context.language] ?? template.subject.ja;
+      subject = subjectSource(template, context);
       payload = {
         ...common,
         template_key: hostedKey,

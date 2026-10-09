@@ -283,6 +283,59 @@ export function scoreCard(
   ].join('');
 }
 
+/**
+ * The offer card: the discount, at score size, with the button under it.
+ *
+ * Built like `scoreCard` because it plays the same part — the number the email
+ * exists to deliver — and carries its own button because it sits under the
+ * headline, above the fold on a phone, where a reader who is already sold
+ * should not have to scroll past the letter to act.
+ *
+ * The percent and never a code: the code rides in the button's link as
+ * `price_dis`, which is why `note` should tell the reader there is nothing to
+ * type.
+ */
+export function offerCard(
+  language: EmailLanguage,
+  opts: { label: string; percent: number; subline: string; cta: EmailAction; note: string }
+): string {
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="e-deep offer" bgcolor="' +
+      NAVY +
+      '" style="background-color:' +
+      NAVY +
+      '; border-radius:14px;">',
+    '<tr><td align="center" style="padding:28px 24px 26px 24px;">',
+    '<p style="margin:0 0 4px 0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:11px; line-height:16px; font-weight:bold; letter-spacing:1.8px; text-transform:uppercase; color:' +
+      CORAL_BTN +
+      ';">' +
+      escapeHtml(opts.label) +
+      '</p>',
+    '<p class="score-num e-on-deep" style="margin:0 0 2px 0; font-family:' +
+      DISPLAY[language] +
+      '; font-size:68px; line-height:72px; font-weight:bold; letter-spacing:-2px; color:#ffffff;">' +
+      escapeHtml(opts.percent) +
+      '%<span style="padding-left:8px; font-size:30px; letter-spacing:0; color:' +
+      CORAL_BTN +
+      ';">OFF</span></p>',
+    '<p class="e-on-deep" style="margin:0 0 20px 0; font-family:' +
+      BODY[language] +
+      '; font-size:14px; line-height:22px; color:#ffffff;">' +
+      escapeHtml(opts.subline) +
+      '</p>',
+    button(language, opts.cta.label, opts.cta.url, { tone: 'coral' }),
+    '<p class="e-on-deep-muted" style="margin:14px 0 0 0; font-family:' +
+      BODY[language] +
+      '; font-size:12px; line-height:19px; color:rgba(255,255,255,0.55);">' +
+      escapeHtml(opts.note) +
+      '</p>',
+    '</td></tr>',
+    '</table>'
+  ].join('');
+}
+
 /** A soft panel. `cream` for information, `blue` for anything actionable. */
 export function panel(html: string, tone: 'cream' | 'blue' | 'canvas' = 'cream'): string {
   const bg = tone === 'blue' ? PALE_BLUE : tone === 'canvas' ? CANVAS : CREAM;

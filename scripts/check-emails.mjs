@@ -11,6 +11,7 @@
  *   - the welcome email never announces a free trial unless there is one;
  *   - a report never offers a document that was not bought;
  *   - a reminder never shows the IQ score or the discount code;
+ *   - a reminder sent with no discount does not mention one;
  *   - every marketing email carries an unsubscribe link, and no transactional
  *     one does;
  *   - every message ships dark-mode rules, so forced-dark clients do not
@@ -244,6 +245,42 @@ for (const language of LANGUAGES) {
     if (/\b122\b/.test(visible)) fail(`${template.id} ${where}: reveals the IQ score before payment`);
     if (visible.includes('BRAIN20')) fail(`${template.id} ${where}: prints the discount code`);
   }
+
+  // 8. A step may be scheduled with "No discount". Its email must then offer
+  //    nothing — a "% off" with the number missing is worse than no email.
+  const offerWords =
+    language === 'ja' ? ['%OFF', '割引', 'クーポン', '半額'] : ['% off', 'discount', 'coupon', 'half the usual'];
+  for (const template of listTemplates('marketing')) {
+    const { subject, html } = renderTemplate(
+      template.id,
+      contextFor(language, { discount_code: null, discount_percent: null })
+    );
+    // No-break spaces folded to plain ones: the button labels join "20%" to
+    // "off" with one, and a leaked label must still match "% off".
+    const visible = (subject + html.replace(/href="[^"]*"/g, '')).replace(/ /g, ' ').toLowerCase();
+    for (const word of offerWords) {
+      if (visible.includes(word.toLowerCase())) {
+        fail(`${template.id} ${where}: mentions "${word}" when sent with no discount`);
+      }
+    }
+    if (html.includes('e-deep offer')) fail(`${template.id} ${where}: offer card shown with no discount`);
+  }
+
+  // 9. A reminder that does carry a discount leads with it: the percent is in
+  //    the subject, in the offer card above the letter, and on the button.
+  const greetingText = language === 'ja' ? '太郎さん、こんにちは' : 'Hi Yuki,';
+  for (const template of listTemplates('marketing')) {
+    const { subject, html } = renderTemplate(template.id, contextFor(language));
+    if (!subject.includes('20%')) fail(`${template.id} ${where}: discount missing from the subject`);
+
+    const card = html.indexOf('e-deep offer');
+    if (card === -1) fail(`${template.id} ${where}: no offer card`);
+    else if (card > html.indexOf(greetingText)) fail(`${template.id} ${where}: offer card sits below the letter`);
+
+    if (!/<a class="e-on-deep"[^>]*>[^<]*20%[^<]*<\/a>/.test(html)) {
+      fail(`${template.id} ${where}: button does not state the discount`);
+    }
+  }
 }
 
 /* ── the opt-out, and the split it depends on ─────────────────────────────── */
@@ -304,6 +341,8 @@ console.log('- the reset email carries no password');
 console.log('- the welcome email claims a trial only when there is one');
 console.log('- no email offers a document that was not bought');
 console.log('- no reminder shows the IQ score or the discount code');
+console.log('- a reminder with a discount states it in the subject, an offer card and the button');
+console.log('- a reminder sent with no discount offers none');
 console.log('- marketing emails carry an unsubscribe link; transactional ones do not');
 console.log('- every message ships dark-mode rules');
 console.log('- Japanese renders with a Japanese font stack and logo');

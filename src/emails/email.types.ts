@@ -168,6 +168,15 @@ export interface EmailTemplate {
   params: readonly EmailTemplateParam[];
   /** Subject line per language. Supports {{param}} placeholders. */
   subject: Record<EmailLanguage, string>;
+  /**
+   * Subject line per language for a send that carries no discount.
+   *
+   * Set by a design that prints the discount but also has copy for going out
+   * without one — its render() switches on `discount_percent`. A design that
+   * declares `discount_percent` and leaves this unset cannot be scheduled
+   * without a code.
+   */
+  subjectWithoutDiscount?: Record<EmailLanguage, string>;
   /** Renders the full HTML body. Only called when no hosted template is set. */
   render: (ctx: EmailTemplateContext) => string;
 }

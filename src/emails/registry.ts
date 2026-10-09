@@ -107,9 +107,22 @@ export function renderTemplate(id: string, ctx: EmailTemplateContext): RenderedE
   return {
     // Subjects are plain text, so they take the raw context — the client shows
     // an ampersand, not `&amp;`.
-    subject: interpolate(template.subject[language], ctx),
+    subject: interpolate(subjectSource(template, { ...ctx, language }), ctx),
     html: template.render({ ...ctx, language })
   };
+}
+
+/**
+ * The subject line to send, placeholders not yet filled: the no-discount
+ * version when the send carries no discount and the design has one.
+ */
+export function subjectSource(template: EmailTemplate, ctx: EmailTemplateContext): string {
+  const subjects =
+    ctx.discount_percent === null && template.subjectWithoutDiscount
+      ? template.subjectWithoutDiscount
+      : template.subject;
+
+  return subjects[ctx.language] ?? subjects.ja;
 }
 
 /**
