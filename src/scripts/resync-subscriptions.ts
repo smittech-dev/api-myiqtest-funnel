@@ -19,6 +19,9 @@ import { logger } from '../utils/logger.util.js';
  *   kept showing the trial's dates.
  * - **Recurring charges.** Nothing handled the invoice events, so no renewal ever
  *   reached `customer_quiz_result_payment_transactions`.
+ * - **The cancellation schedule.** `cancel_at` and `cancel_requested_at` were
+ *   added after the rows existed; a custom-date cancellation made before then
+ *   is invisible until this fills them.
  *
  * The webhooks now keep both current, so this is a one-off catch-up for what was
  * missed rather than something to schedule.

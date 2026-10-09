@@ -167,13 +167,21 @@ export interface SubscriptionDto {
   currentPeriodEnd: number | null;
   canceledAt: number | null;
   /**
-   * Cancelled, but still inside the period already paid for.
+   * Cancelled, but not ended yet — the renewal is off and access continues.
    *
-   * `status` is still `active` in this state and access continues, so this is
-   * the only thing that tells "cancelling on the 18th" from "renewing on the
-   * 18th".
+   * `status` is still `active` (or `trialing`) in this state, so this is the
+   * only thing that tells "cancelling on the 18th" from "renewing on the 18th".
+   * True for every kind of scheduled end, including a custom date set in the
+   * Stripe Dashboard, despite the name it keeps for compatibility.
    */
   cancelAtPeriodEnd: boolean;
+  /**
+   * When access stops, while `cancelAtPeriodEnd` is true; null otherwise.
+   *
+   * Usually the same as `currentPeriodEnd`, but not for a custom date set
+   * further out than the current period, so this is the date to show.
+   */
+  cancelAt: number | null;
   /** Days between charges — 28, not a calendar month. */
   intervalDays: number;
   /**

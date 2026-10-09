@@ -10,7 +10,11 @@ import { ms } from '../utils/boost-date.util.js';
 import { BoostError } from '../utils/boost-response.util.js';
 import { boostAppUrl, type BoostLocale } from '../utils/boost-locale.util.js';
 import { logger } from '../utils/logger.util.js';
-import { readSubscriptionPeriod } from '../utils/stripe-period.util.js';
+import {
+  applyStripeSubscription,
+  isCancellationScheduled,
+  scheduledCancelAt
+} from '../utils/stripe-subscription.util.js';
 import type { SubscriptionDto } from '../types/boost.types.js';
 
 const subscriptionRepo = () => AppDataSource.getRepository(CustomerSubscription);
@@ -167,7 +171,10 @@ export async function toSubscriptionDto(
     startedAt: ms(subscription.current_period_start) ?? subscription.created_at.getTime(),
     currentPeriodEnd: ms(subscription.current_period_end),
     canceledAt: ms(subscription.canceled_at),
-    cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+    // Every kind of scheduled end, not just Stripe's flag of the same name —
+    // see `applyStripeSubscription` for the cases that leave that flag false.
+    cancelAtPeriodEnd: isCancellationScheduled(subscription),
+    cancelAt: ms(scheduledCancelAt(subscription)),
     intervalDays: SUBSCRIPTION_INTERVAL_DAYS,
     // Stripe reports `trialing` until the first charge, and `current_period_end`
     // is the trial end for as long as it does.
@@ -224,26 +231,9 @@ async function applyStripeState(
   record: CustomerSubscription,
   subscription: Stripe.Subscription
 ): Promise<CustomerSubscription> {
-  // Read through the helper rather than off the subscription: Stripe moved the
-  // period onto the items in Basil, and this row is the one the subscription
-  // screen prints "renews on" from.
-  const { start: periodStart, end: periodEnd } = readSubscriptionPeriod(subscription);
-
-  record.status = subscription.status;
-  record.cancel_at_period_end = Boolean(subscription.cancel_at_period_end);
-  if (periodStart) record.current_period_start = periodStart;
-  if (periodEnd) record.current_period_end = periodEnd;
-
-  // When it actually ended, not when it was asked to end.
-  //
-  // Stripe's own `canceled_at` is the moment cancellation was *requested*, so
-  // it is set the instant `cancel_at_period_end` is flipped — a month before
-  // access stops. Copying it straight across would have the subscription screen
-  // print "Ended on" against a membership the member is still using, so this
-  // only fills once Stripe reports the subscription as actually over.
-  const ended = subscription.status === 'canceled';
-  const endedAt = (subscription as any).ended_at ?? subscription.canceled_at;
-  record.canceled_at = ended && endedAt ? new Date(endedAt * 1000) : null;
+  // The same mapping the webhook writes with — status, period, and the
+  // cancellation schedule in every form Stripe records it.
+  applyStripeSubscription(record, subscription);
 
   await readCardInto(record, subscription);
 
@@ -309,6 +299,11 @@ export async function cancelSubscription(customerId: string): Promise<CustomerSu
     throw new BoostError(409, 'already_canceled', 'This membership has already ended.');
   }
 
+  // Already ending — cancelled here before, or from the billing portal or the
+  // Dashboard. Asking again is not harmless: it would replace a custom end date
+  // set in the Dashboard with the period end, which can be weeks earlier.
+  if (isCancellationScheduled(record)) return record;
+
   try {
     const updated = await stripe.subscriptions.update(record.stripe_subscription_id, {
       cancel_at_period_end: true
@@ -344,9 +339,14 @@ export async function resumeSubscription(customerId: string): Promise<CustomerSu
 
   // Already running. Return the current state rather than an error: the member
   // wanted it active, and it is.
-  if (!record.cancel_at_period_end) return record;
+  //
+  // Not `cancel_at_period_end` alone: a cancellation on a custom date leaves that
+  // flag false, and reading only it made "resume" a silent no-op for those.
+  if (!isCancellationScheduled(record)) return record;
 
   try {
+    // Clears every kind of scheduled end, a custom `cancel_at` included. Stripe
+    // rejects a request that sends `cancel_at` alongside this, so it must not.
     const updated = await stripe.subscriptions.update(record.stripe_subscription_id, {
       cancel_at_period_end: false
     });

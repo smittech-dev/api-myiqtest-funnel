@@ -15,6 +15,7 @@ import { emailTransactionalService } from './email-transactional.service.js';
 import { logger } from '../utils/logger.util.js';
 import { resolveFunnelRedirect, FunnelRedirect } from '../utils/funnel-redirect.util.js';
 import { readSubscriptionPeriod } from '../utils/stripe-period.util.js';
+import { applyStripeSubscription } from '../utils/stripe-subscription.util.js';
 
 export interface SubscriptionOutcome {
   created: boolean;
@@ -26,6 +27,9 @@ export interface SubscriptionOutcome {
 
 /** Postgres `unique_violation` — two settles inserting the same row at once. */
 const UNIQUE_VIOLATION = '23505';
+
+/** Stripe subscription statuses there is no way back from. */
+const ENDED_STATUSES = new Set(['canceled', 'incomplete_expired']);
 
 /** No subscription, and why. */
 function subscriptionSkipped(reason: string): SubscriptionOutcome {
@@ -576,15 +580,14 @@ export class PaymentService {
     // Never read straight off the subscription: Stripe moved these onto the
     // items in Basil, and webhooks arrive in the *account's* API version rather
     // than the one our SDK is pinned to. See `readSubscriptionPeriod`.
-    let { start: periodStart, end: periodEnd } = readSubscriptionPeriod(subscription);
+    const { start: periodStart, end: periodEnd } = readSubscriptionPeriod(subscription);
 
     // Neither shape carried a period — an event trimmed by an API version we did
     // not anticipate. Re-read the subscription through our own pinned version,
     // which is a shape we know, rather than leaving the dates stale for ever.
     if (!periodStart && !periodEnd) {
       try {
-        const fresh = await this.stripe.subscriptions.retrieve(subscription.id);
-        ({ start: periodStart, end: periodEnd } = readSubscriptionPeriod(fresh));
+        subscription = await this.stripe.subscriptions.retrieve(subscription.id);
       } catch (err: any) {
         logger.warn(
           `Could not re-read subscription ${subscription.id} for its billing period: ${err.message}`
@@ -598,26 +601,22 @@ export class PaymentService {
         customer_quiz_result_id: quizResultId,
         stripe_subscription_id: subscription.id,
         stripe_customer_id: stripeCustomerId,
-        status: subscription.status,
         plan_name: item?.price?.nickname || 'myIQ Cognitive Training Program',
         amount: amount.toString(),
-        currency: (item?.price?.currency || 'jpy').toUpperCase(),
-        cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
-        current_period_start: periodStart,
-        current_period_end: periodEnd
+        currency: (item?.price?.currency || 'jpy').toUpperCase()
       });
     } else {
-      record.status = subscription.status;
-      // A membership cancelled from the members' area, or from Stripe's billing
-      // portal, stays `active` until its period runs out — this flag is the only
-      // thing that distinguishes "cancelling on the 18th" from "renewing on the
-      // 18th", so it has to ride along with the status it qualifies.
-      record.cancel_at_period_end = Boolean(subscription.cancel_at_period_end);
-      // The whole point of this method for a renewal or a trial conversion: the
-      // period has moved on, and these two columns are what the members' area
-      // and the admin read to say when the next charge lands.
-      if (periodStart) record.current_period_start = periodStart;
-      if (periodEnd) record.current_period_end = periodEnd;
+      // An ended subscription is final at Stripe — it can never be reactivated.
+      // A payload that says otherwise is older than the row: Stripe redelivers
+      // and reorders events, and a retried `updated` from before a cancellation
+      // can land after the `deleted`. Writing it would hand an ended membership
+      // its access back.
+      if (ENDED_STATUSES.has(record.status) && record.status !== subscription.status) {
+        logger.info(
+          `Subscription ${subscription.id}: ignoring a stale "${subscription.status}" — the row has already ended as "${record.status}"`
+        );
+        return;
+      }
       // Backfill the quiz link for rows written before the reference existed
       if (!record.customer_quiz_result_id && quizResultId) {
         record.customer_quiz_result_id = quizResultId;
@@ -631,6 +630,10 @@ export class PaymentService {
       record.card_exp_month = null;
       record.card_exp_year = null;
     }
+
+    // Status, billing period and the whole cancellation schedule — the same
+    // mapping the members' area writes with, so the two cannot disagree.
+    applyStripeSubscription(record, subscription);
 
     try {
       await this.subscriptionRepository.save(record);
@@ -1286,16 +1289,16 @@ export class PaymentService {
         break;
       }
 
+      // Every change to a subscription made anywhere — the members' area, the
+      // billing portal, the Dashboard, a trial converting, a renewal, an
+      // immediate cancel, a scheduled one taking effect — arrives as one of
+      // these three, and all three are handled the same way: by writing Stripe's
+      // current answer.
       case 'customer.subscription.created':
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as Stripe.Subscription;
-        await this.handleSubscriptionUpdated(subscription);
-        break;
-      }
-
+      case 'customer.subscription.updated':
       case 'customer.subscription.deleted': {
         const subscription = event.data.object as Stripe.Subscription;
-        await this.handleSubscriptionDeleted(subscription);
+        await this.handleSubscriptionChanged(subscription);
         break;
       }
 
@@ -1607,16 +1610,25 @@ export class PaymentService {
    * Deliberately retrieves rather than trusting the invoice's expanded copy: the
    * retrieve goes through our pinned API version, so the billing period comes back
    * in the shape we expect no matter which version the webhook arrived in.
+   *
+   * `fallback` is the copy an event carried, written only when Stripe cannot be
+   * reached; `upsertSubscriptionRecord` refuses to walk an ended row backwards
+   * with it, which is the one way an old copy could do harm.
    */
   private async syncSubscriptionFromStripe(
-    subscriptionId: string
+    subscriptionId: string,
+    fallback?: Stripe.Subscription
   ): Promise<CustomerSubscription | null> {
     let subscription: Stripe.Subscription | null = null;
 
     try {
       subscription = await this.stripe.subscriptions.retrieve(subscriptionId);
     } catch (err: any) {
-      logger.warn(`Could not read subscription ${subscriptionId} from Stripe: ${err.message}`);
+      logger.warn(
+        `Could not read subscription ${subscriptionId} from Stripe: ${err.message}` +
+          (fallback ? ' — writing the copy the event carried' : '')
+      );
+      subscription = fallback ?? null;
     }
 
     if (subscription) {
@@ -1678,37 +1690,23 @@ export class PaymentService {
     return null;
   }
 
-  private async handleSubscriptionUpdated(subscription: Stripe.Subscription): Promise<void> {
-    const stripeCustomerId =
-      typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
-
-    const customerId = await this.resolveCustomerIdForSubscription(
-      subscription.id,
-      stripeCustomerId
-    );
-
-    if (!customerId) {
-      return;
-    }
-
-    // Same upsert the first-sale flow uses, so a webhook arriving after we already
-    // created the subscription simply refreshes it instead of duplicating. The quiz
-    // reference rides along in metadata for subscriptions we created ourselves.
-    const quizResultId = subscription.metadata?.quiz_result_id || null;
-    await this.upsertSubscriptionRecord(subscription, customerId, quizResultId);
-  }
-
-  private async handleSubscriptionDeleted(subscription: Stripe.Subscription): Promise<void> {
-    const subRecord = await this.subscriptionRepository.findOne({
-      where: { stripe_subscription_id: subscription.id }
-    });
-
-    if (subRecord) {
-      subRecord.status = 'canceled';
-      subRecord.canceled_at = new Date();
-      subRecord.cancel_reason = subscription.cancellation_details?.reason || 'User canceled';
-      await this.subscriptionRepository.save(subRecord);
-    }
+  /**
+   * A subscription was created, changed or ended at Stripe.
+   *
+   * The event is treated as a notice that something changed, not as the state
+   * to store. What is written is Stripe's current answer, re-read here, because
+   * Stripe does not deliver events in order and retries the ones that failed:
+   * a delayed `updated` from before a cancellation can arrive after it, and
+   * storing its payload would show a member as renewing who has cancelled.
+   * The re-read also comes back in our pinned API version, so the period and the
+   * cancellation fields are always in a shape we know.
+   *
+   * Same upsert the first-sale flow uses, so a webhook arriving after we already
+   * created the subscription simply refreshes it instead of duplicating. The quiz
+   * reference rides along in metadata for subscriptions we created ourselves.
+   */
+  private async handleSubscriptionChanged(subscription: Stripe.Subscription): Promise<void> {
+    await this.syncSubscriptionFromStripe(subscription.id, subscription);
   }
 }
 

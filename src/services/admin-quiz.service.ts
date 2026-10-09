@@ -6,15 +6,20 @@ import { CustomerQuizResultPaymentTransaction } from '../entities/CustomerQuizRe
 import { CustomerSubscription } from '../entities/CustomerSubscription.entity.js';
 import { Customer } from '../entities/Customer.entity.js';
 import { AppError } from '../utils/app-error.util.js';
+import { scheduledCancelAt } from '../utils/stripe-subscription.util.js';
 import {
   AdminCustomerSummary,
   AdminPaginatedResult,
   AdminQuizListItem,
-  AdminQuizListQuery
+  AdminQuizListQuery,
+  AdminSubscription
 } from '../types/admin.types.js';
 
 const TXN_TABLE = 'customer_quiz_result_payment_transactions';
 const SUB_TABLE = 'customer_subscriptions';
+
+/** Stripe statuses where the plan is still running (and still grants access). */
+const RUNNING_STATUSES = new Set(['active', 'trialing', 'past_due']);
 
 export class AdminQuizService {
   private quizRepository = AppDataSource.getRepository(CustomerQuizResult);
@@ -131,10 +136,11 @@ export class AdminQuizService {
       const firstSale = succeeded.find((t) => t.transaction_type === 'first_sale') ?? null;
       const crossSale = succeeded.find((t) => t.transaction_type === 'cross_sale') ?? null;
 
-      // An active plan is the headline; otherwise show whatever the latest one is.
+      // A running plan is the headline — a trial counts, it is what most plans
+      // are in their first days; otherwise show whatever the latest one is.
       const quizSubs = subscriptions.filter((s) => s.customer_quiz_result_id === quiz.id);
       const subscription =
-        quizSubs.find((s) => s.status === 'active') ??
+        quizSubs.find((s) => RUNNING_STATUSES.has(s.status)) ??
         quizSubs.sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0] ??
         null;
 
@@ -159,7 +165,10 @@ export class AdminQuizService {
         has_cross_sale: crossSale !== null,
         first_sale_amount: firstSale?.amount ?? null,
         cross_sale_amount: crossSale?.amount ?? null,
-        subscription_status: subscription?.status ?? null
+        subscription_status: subscription?.status ?? null,
+        // Stripe keeps a cancelled plan `trialing` or `active` until it actually
+        // ends, so the status alone reads as "renewing". This is what says it isn't.
+        subscription_cancel_at: subscription ? scheduledCancelAt(subscription) : null
       };
     });
   }
@@ -172,7 +181,7 @@ export class AdminQuizService {
     quiz: CustomerQuizResult;
     customer: AdminCustomerSummary | null;
     transactions: CustomerQuizResultPaymentTransaction[];
-    subscriptions: CustomerSubscription[];
+    subscriptions: AdminSubscription[];
   }> {
     if (!/^\d+$/.test(id)) {
       throw new AppError('Invalid quiz id.', 400);
@@ -212,7 +221,10 @@ export class AdminQuizService {
           }
         : null,
       transactions,
-      subscriptions
+      subscriptions: subscriptions.map((s) => ({
+        ...s,
+        scheduled_cancel_at: scheduledCancelAt(s)
+      }))
     };
   }
 }

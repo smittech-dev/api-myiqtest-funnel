@@ -2,7 +2,7 @@
  * Provisions an admin user. There is no registration endpoint by design, so
  * accounts are created here, on the server.
  *
- *   npm run create:admin -- --name "Jane" --email jane@example.com --password "s3cret!"
+ *   npm run create:admin -- --name "Jane" --email jane1@example.com --password "s3cret!1234"
  *
  * Re-running with an existing email resets that admin's password instead of
  * failing, which doubles as the password-reset path the panel does not expose.

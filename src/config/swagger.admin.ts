@@ -239,7 +239,20 @@ export const adminSchemas = {
       has_cross_sale: { type: 'boolean' },
       first_sale_amount: { type: 'string', nullable: true, example: '2980.00' },
       cross_sale_amount: { type: 'string', nullable: true, example: '1480.00' },
-      subscription_status: { type: 'string', nullable: true, example: 'active' }
+      subscription_status: {
+        type: 'string',
+        nullable: true,
+        description:
+          "Stripe's status. A cancelled trial stays `trialing` until it ends — see subscription_cancel_at.",
+        example: 'trialing'
+      },
+      subscription_cancel_at: {
+        type: 'string',
+        format: 'date-time',
+        nullable: true,
+        description:
+          'When a scheduled cancellation takes effect, however it was made (members\' area, billing portal, Dashboard). Null when the plan renews or has already ended.'
+      }
     }
   },
   AdminQuizListResult: {
@@ -279,7 +292,8 @@ export const adminSchemas = {
       },
       subscriptions: {
         type: 'array',
-        description: 'Every subscription started from this quiz, newest first.',
+        description:
+          'Every subscription started from this quiz, newest first. Each row also carries `scheduled_cancel_at`: when a pending cancellation takes effect, or null.',
         items: { type: 'object' }
       }
     }

@@ -476,6 +476,45 @@ charged.
 `invoice.payment_succeeded`, `invoice.payment_failed`, `customer.subscription.created`,
 `customer.subscription.updated`, `customer.subscription.deleted`.
 
+#### Cancellations, and keeping the row in step with Stripe
+
+Cancelling does **not** change `status`. A trial cancelled from the members' area stays `trialing`
+at Stripe until the trial ends, and a paid plan stays `active` until its period ends; only then does
+Stripe end it (`customer.subscription.deleted`, `status: canceled`). What changes when someone
+cancels is the schedule, and Stripe records it in one of three ways:
+
+| How it was cancelled | `cancel_at_period_end` | `cancel_at` |
+|---|---|---|
+| At period end — members' area, billing portal | `true` | the period end |
+| On a custom date — Dashboard "on a custom day", or the API | **`false`** | the custom date |
+| Any cancellation on a `billing_mode: flexible` subscription | **`false`** | the resolved date |
+
+So the row stores Stripe's `cancel_at`, and `scheduledCancelAt()` /
+`isCancellationScheduled()` (`src/utils/stripe-subscription.util.ts`) are what everything reads —
+the admin's "Cancels on" badge, the members' area, and cancel/resume. Reading only
+`cancel_at_period_end` reports a custom-date cancellation as a renewal. Resuming sends
+`cancel_at_period_end: false`, which clears either kind (Stripe rejects `cancel_at` alongside it).
+
+| Column | Stripe field | Meaning |
+|---|---|---|
+| `status` | `status` | As Stripe reports it, every status included |
+| `cancel_at` | `cancel_at` | When a scheduled cancellation takes effect |
+| `cancel_requested_at` | `canceled_at` | When the cancellation was asked for (Stripe's name is misleading) |
+| `canceled_at` | `ended_at` | When it actually ended. Null while a cancellation is only scheduled |
+| `cancel_reason` | `cancellation_details.reason` | `cancellation_requested`, `payment_failed`, `payment_disputed` |
+
+Every write goes through `applyStripeSubscription`, so the webhook, the first sale, the members'
+cancel/resume and the resync script cannot disagree. The three `customer.subscription.*` events are
+handled alike: the subscription is **re-read from Stripe** and that is what is written, because
+Stripe does not deliver events in order — a delayed `updated` from before a cancellation can arrive
+after it. If Stripe cannot be reached the event's own copy is written instead, but a row that has
+ended is never moved back out of `canceled`.
+
+`npm run test:subscription-sync` drives all of the above against Stripe test mode, including
+stale and out-of-order events. After deploying the `cancel_at` columns
+(`docs/migrations/2026-10-09-subscription-cancel-schedule.sql`), run
+`npm run resync:subscriptions` once to fill them for existing rows.
+
 #### The billing period, across Stripe API versions
 
 `current_period_start` / `current_period_end` used to sit on the Subscription. From API version

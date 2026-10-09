@@ -1,5 +1,7 @@
 /** Shapes returned by the /admin endpoints, consumed by the admin panel UI. */
 
+import type { CustomerSubscription } from '../entities/CustomerSubscription.entity.js';
+
 export interface AdminUserProfile {
   id: string;
   name: string;
@@ -61,8 +63,17 @@ export interface AdminQuizListItem {
   has_cross_sale: boolean;
   first_sale_amount: string | null;
   cross_sale_amount: string | null;
+  /** Stripe's status. A cancelled trial is still `trialing` until it ends. */
   subscription_status: string | null;
+  /** When a scheduled cancellation takes effect; null if it renews or has ended. */
+  subscription_cancel_at: Date | null;
 }
+
+/** A subscription row as the admin detail returns it. */
+export type AdminSubscription = CustomerSubscription & {
+  /** When a pending cancellation takes effect, however it was made; null if none. */
+  scheduled_cancel_at: Date | null;
+};
 
 export interface AdminPaginatedResult<T> {
   items: T[];

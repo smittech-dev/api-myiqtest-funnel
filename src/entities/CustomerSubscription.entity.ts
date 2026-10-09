@@ -77,6 +77,13 @@ export class CustomerSubscription {
   @Column({ type: 'smallint', nullable: true })
   card_exp_year!: number | null;
 
+  /**
+   * When the subscription actually ended — Stripe's `ended_at`. Null while it is
+   * still running, including while a cancellation is scheduled.
+   *
+   * Not Stripe's `canceled_at`, which is when the cancellation was *requested*;
+   * that lives in `cancel_requested_at`.
+   */
   @Column({ type: 'timestamptz', nullable: true })
   canceled_at!: Date | null;
 
@@ -84,15 +91,33 @@ export class CustomerSubscription {
    * Mirrors Stripe's `cancel_at_period_end`.
    *
    * Cancelling stops the renewal without taking away time already paid for, so
-   * a cancelled subscription stays `active` until the period ends. Without this
-   * column nothing can tell "cancelling on the 18th" from "renewing on the
-   * 18th" — `status` is identical in both cases and `canceled_at` is still null.
+   * a cancelled subscription stays `active` (or `trialing`) until the period
+   * ends. Only true for an "at period end" cancellation, though — a custom date
+   * leaves it false. Read `cancel_at`, or `scheduledCancelAt()`, to know whether
+   * a subscription is ending.
    *
    * Maintained by the same webhook that maintains `status`, so it is Stripe's
    * answer rather than our guess at it.
    */
   @Column({ type: 'boolean', default: false })
   cancel_at_period_end!: boolean;
+
+  /**
+   * When a scheduled cancellation takes effect — Stripe's `cancel_at`.
+   *
+   * Set for every kind of scheduled end: at period end (Stripe fills in the
+   * period end), on a custom date chosen in the Dashboard, or by a subscription
+   * schedule. Null when the subscription is set to renew.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  cancel_at!: Date | null;
+
+  /**
+   * When the cancellation was asked for — Stripe's `canceled_at`. Cleared if the
+   * cancellation is withdrawn.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  cancel_requested_at!: Date | null;
 
   @Column({ type: 'varchar', length: 255, nullable: true })
   cancel_reason!: string | null;
