@@ -10,6 +10,7 @@
  *   - the reset email never carries a password;
  *   - the welcome email never announces a free trial unless there is one;
  *   - a report never offers a document that was not bought;
+ *   - a reminder never shows the IQ score or the discount code;
  *   - every marketing email carries an unsubscribe link, and no transactional
  *     one does;
  *   - every message ships dark-mode rules, so forced-dark clients do not
@@ -232,6 +233,17 @@ for (const language of LANGUAGES) {
   if (anonymous.includes('undefined') || anonymous.includes('null')) {
     fail(`report ${where}: leaked undefined/null into the copy`);
   }
+
+  // 7. A reminder goes to someone who has not paid, and the score is what they
+  //    pay to see — so it must not appear. Nor must the discount code: it rides
+  //    in the CTA link as `price_dis`, so only the hrefs may carry it.
+  for (const template of listTemplates('marketing')) {
+    const { subject, html } = renderTemplate(template.id, contextFor(language));
+    const visible = subject + html.replace(/href="[^"]*"/g, '');
+    // A whole number, because the navy (#12294a) contains the same digits.
+    if (/\b122\b/.test(visible)) fail(`${template.id} ${where}: reveals the IQ score before payment`);
+    if (visible.includes('BRAIN20')) fail(`${template.id} ${where}: prints the discount code`);
+  }
 }
 
 /* ── the opt-out, and the split it depends on ─────────────────────────────── */
@@ -291,6 +303,7 @@ console.log('- no placeholder survives into a sent message');
 console.log('- the reset email carries no password');
 console.log('- the welcome email claims a trial only when there is one');
 console.log('- no email offers a document that was not bought');
+console.log('- no reminder shows the IQ score or the discount code');
 console.log('- marketing emails carry an unsubscribe link; transactional ones do not');
 console.log('- every message ships dark-mode rules');
 console.log('- Japanese renders with a Japanese font stack and logo');

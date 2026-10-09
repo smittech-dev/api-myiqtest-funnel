@@ -1,12 +1,5 @@
 import type { EmailTemplate, EmailLanguage, EmailTemplateContext } from '../email.types.js';
-import {
-  discountPanel,
-  escapeContext,
-  interpolate,
-  paragraph,
-  renderLayout,
-  scoreLine
-} from '../layout.js';
+import { escapeContext, interpolate, paragraph, renderLayout } from '../layout.js';
 
 /**
  * The four abandoned-checkout designs, one per rung of the discount ladder.
@@ -208,11 +201,14 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
     category: 'marketing',
     // Declared, not inferred: the admin panel lists these, and a template hosted
     // in ZeptoMail receives exactly these keys as merge_info.
+    //
+    // No `iq_score` and no `discount_code`, on purpose. The score is only
+    // revealed once the report is paid for, so a reminder that prints it gives
+    // away the thing it is selling. The code is never shown because it does not
+    // need to be: cta_url carries it as `price_dis`, and checkout applies it.
     params: [
       'first_name',
       'honorific_name',
-      'iq_score',
-      'discount_code',
       'discount_percent',
       'cta_url',
       'site_url',
@@ -240,7 +236,6 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
 
       const body =
         paragraph(greeting(ctx.language, ctx.first_name)) +
-        scoreLine(ctx.language, ctx.iq_score) +
         text.paragraphs.map((p) => paragraph(asHtml(p), { html: true })).join('');
 
       return renderLayout({
@@ -250,9 +245,6 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
         headline: asText(text.headline),
         body,
         actions: [{ label: asText(text.cta), url: ctx.cta_url, primary: true }],
-        discountBlock: ctx.discount_code
-          ? discountPanel(ctx.language, ctx.discount_code, ctx.discount_percent)
-          : '',
         footnote: asText(text.footnote),
         recipientEmail: ctx.email,
         unsubscribeUrl: ctx.unsubscribe_url ?? undefined,
