@@ -163,7 +163,7 @@ const DEFINITIONS: ReminderDefinition[] = [
     offer: true,
     copy: {
       ja: {
-        subject: '【最終オファー】myIQレポートが{{discount_percent}}%OFF！',
+        subject: '【あなただけの特別オファー】myIQレポートが{{discount_percent}}%OFF！',
         preview: '期間限定で、あなた専用のmyIQレポートが{{discount_percent}}%OFFになります。',
         paragraphs: [
           'IQクイズの受験が完了しました。あなた専用の結果は、今もお受け取りをお待ちしています。',
@@ -175,7 +175,7 @@ const DEFINITIONS: ReminderDefinition[] = [
         closing: 'これが最もお得なご案内です。クイズをもっと活かせるこの機会を、お見逃しなく。'
       },
       en: {
-        subject: 'Final offer: Get {{discount_percent}}% off your myIQ Report!',
+        subject: 'Your exclusive offer: {{discount_percent}}% off your myIQ Report!',
         preview: 'For a limited time, enjoy {{discount_percent}}% OFF your personalized myIQ Report.',
         paragraphs: [
           'You’ve completed your IQ quiz, and your personalized results are still waiting for you.',
