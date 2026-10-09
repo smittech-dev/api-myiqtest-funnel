@@ -263,7 +263,7 @@ requiring the shared key there would mean shipping it to every visitor.
 | 10 | `GET` | `/admin/email-marketing/logs` | Bearer | Paginated send history, filterable by step and status |
 | 11 | `GET` | `/admin/email-marketing/stats` | Bearer | Sent / failed / skipped counts, in total and per step |
 | 12 | `POST` | `/admin/email-marketing/run` | Bearer | Run the sequence immediately |
-| 13 | `POST` | `/admin/email-marketing/test-send` | Bearer | Send one template to an address with sample data |
+| 13 | `POST` | `/admin/email-marketing/test-send` | Bearer | Send one saved step (its template and discount code) to an address with a sample customer |
 | 14 | `GET` | `/admin/contact-inquiries` | Bearer | Paginated contact form inbox, with an unfiltered unread count |
 | 15 | `GET` | `/admin/contact-inquiries/:id` | Bearer | One inquiry |
 | 16 | `PATCH` | `/admin/contact-inquiries/:id` | Bearer | Mark it read or unread |
@@ -576,9 +576,9 @@ What is in it today:
 | `transactional_welcome` | transactional | The first sale settles — carries the myIQ Cognitive Training Program credentials |
 | `transactional_report_ready` | transactional | The customer finishes the funnel — links their reports |
 
-`category` is what separates them in the admin panel: the marketing step picker offers only
-marketing designs, while **Send a test** offers everything, because an operator needs to
-preview a welcome email as much as a discount nudge.
+`category` is what separates them in the admin panel: the step picker offers only marketing
+designs. **Send a test** picks a configured step rather than a template, so it covers the
+marketing ladder only; the transactional designs are reviewed with `npm run send:test-emails`.
 
 It is code and config rather than a database table on purpose. These are versioned artefacts:
 a design belongs in the same commit as the copy it renders and the parameters it declares, and
@@ -657,7 +657,7 @@ system, and this is an inbox.
 ### Email marketing (abandoned checkout sequence)
 
 Every five minutes, the sequence finds people who **took the quiz**, whose **email verified**,
-who **never completed the first sale**, and sends them the one discount email they are due.
+who **never completed the first sale**, and sends them the one reminder email they are due.
 
 The sequence lives in two tables — `email_marketing_settings` (one row of global options) and
 `email_marketing_steps` (one row per rung). The application **seeds them on first boot** if
@@ -666,10 +666,14 @@ ladder that sends nothing until someone switches it on:
 
 | Step | Delay | Discount | Template |
 |---|---|---|---|
-| `step_24h` | 24 hours | 20% | `marketing_reminder_day1` |
-| `step_48h` | 48 hours | 20% | `marketing_reminder_day2` |
-| `step_72h` | 72 hours | 50% | `marketing_reminder_day3` |
+| `step_24h` | 24 hours | — | `marketing_reminder_day1` |
+| `step_48h` | 48 hours | — | `marketing_reminder_day2` |
+| `step_72h` | 72 hours | 20% | `marketing_reminder_day3` |
 | `step_5d` | 5 days | 50% | `marketing_reminder_day5` |
+
+Templates 1–2 never mention a price, so they suit a step with no code. Templates 3–4 print the
+step's percent in the subject, the copy and the button, so the panel will not save them on
+"No discount".
 
 | Variable | Default | Purpose |
 |---|---|---|
@@ -734,8 +738,10 @@ delay, discount code and template, plus batch size, retry limit and the `max_age
 Steps can be added and removed — a new one arrives **disabled**, a day after the last rung, so
 saving it cannot start emailing whoever already qualifies.
 It also shows send counts, recent activity with failure reasons, a **Run now** button, and a
-**Send a test** box that delivers a design to your own inbox **without writing a tracking
-row** — so a test never consumes anyone's place in the sequence.
+**Send a test** box that delivers one saved step — its template, with its discount code — to
+your own inbox **without writing a tracking row**, so a test never consumes anyone's place in
+the sequence. It builds the email with the same code as a real send, so the subject, offer and
+checkout link are the step's own.
 
 Saving replaces the ladder wholesale, in one transaction, and validates first — a step's delay
 only means something against the other steps' delays, so the schema has to see all of them at

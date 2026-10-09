@@ -138,11 +138,11 @@ export type EmailMarketingConfig = z.infer<typeof emailMarketingConfigSchema>;
 const SETTINGS_ID = 1;
 
 /**
- * The sequence from the brief: 24h and 48h at 20% off, then 72h and 5 days at
- * 50%. Seeded into the database the first time the app runs against an empty
- * `email_marketing_settings` table, with the sequence **disabled** — so a fresh
- * environment boots with a working ladder that sends nothing until someone
- * turns it on.
+ * The sequence from the brief: 24h and 48h with no discount, then 72h at 20%
+ * off and 5 days at 50%. Seeded into the database the first time the app runs
+ * against an empty `email_marketing_settings` table, with the sequence
+ * **disabled** — so a fresh environment boots with a working ladder that sends
+ * nothing until someone turns it on.
  */
 export const DEFAULT_EMAIL_MARKETING_CONFIG: EmailMarketingConfig = {
   enabled: false,
@@ -152,26 +152,26 @@ export const DEFAULT_EMAIL_MARKETING_CONFIG: EmailMarketingConfig = {
   steps: [
     {
       key: 'step_24h',
-      label: '24 hours — 20% off',
+      label: '24 hours — no discount',
       enabled: true,
       delay_hours: 24,
-      discount_code: 'K75QSQC',
+      discount_code: '',
       template_id: 'marketing_reminder_day1'
     },
     {
       key: 'step_48h',
-      label: '48 hours — 20% off',
+      label: '48 hours — no discount',
       enabled: true,
       delay_hours: 48,
-      discount_code: 'K75QSQC',
+      discount_code: '',
       template_id: 'marketing_reminder_day2'
     },
     {
       key: 'step_72h',
-      label: '72 hours — 50% off',
+      label: '72 hours — 20% off',
       enabled: true,
       delay_hours: 72,
-      discount_code: '5G4A2TC',
+      discount_code: 'K75QSQC',
       template_id: 'marketing_reminder_day3'
     },
     {
@@ -393,10 +393,7 @@ export function templateRequiresDiscount(template: EmailTemplate): boolean {
  * save would then reject.
  *
  * Sends **every** template, marketing and transactional, each tagged with its
- * category. The panel filters: the step picker offers marketing designs only,
- * while the test-send box offers all of them — an operator needs to preview the
- * welcome email as much as a discount nudge, and there is no second endpoint
- * that would let them.
+ * category. The panel filters: the step picker offers marketing designs only.
  */
 export function getEmailMarketingOptions() {
   return {

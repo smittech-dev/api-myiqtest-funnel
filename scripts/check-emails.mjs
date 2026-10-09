@@ -80,6 +80,9 @@ function contextFor(language, overrides = {}) {
 const LANGUAGES = ['en', 'ja'];
 let rendered = 0;
 
+/** Whether a design's copy prints the discount — the same test the settings save applies. */
+const printsDiscount = (template) => template.params.includes('discount_percent');
+
 /* ── every template, both languages ───────────────────────────────────────── */
 
 /**
@@ -248,9 +251,13 @@ for (const language of LANGUAGES) {
 
   // 8. A step may be scheduled with "No discount". Its email must then offer
   //    nothing — a "% off" with the number missing is worse than no email.
+  //    A design whose copy prints the discount and has no version without one
+  //    is exempt: the settings save refuses to schedule it on "No discount".
   const offerWords =
     language === 'ja' ? ['%OFF', '割引', 'クーポン', '半額'] : ['% off', 'discount', 'coupon', 'half the usual'];
   for (const template of listTemplates('marketing')) {
+    if (printsDiscount(template) && !template.subjectWithoutDiscount) continue;
+
     const { subject, html } = renderTemplate(
       template.id,
       contextFor(language, { discount_code: null, discount_percent: null })
@@ -266,16 +273,13 @@ for (const language of LANGUAGES) {
     if (html.includes('e-deep offer')) fail(`${template.id} ${where}: offer card shown with no discount`);
   }
 
-  // 9. A reminder that does carry a discount leads with it: the percent is in
-  //    the subject, in the offer card above the letter, and on the button.
-  const greetingText = language === 'ja' ? '太郎さん、こんにちは' : 'Hi Yuki,';
+  // 9. A reminder whose copy carries the discount states it where the reader
+  //    decides: in the subject and on the button.
   for (const template of listTemplates('marketing')) {
+    if (!printsDiscount(template)) continue;
+
     const { subject, html } = renderTemplate(template.id, contextFor(language));
     if (!subject.includes('20%')) fail(`${template.id} ${where}: discount missing from the subject`);
-
-    const card = html.indexOf('e-deep offer');
-    if (card === -1) fail(`${template.id} ${where}: no offer card`);
-    else if (card > html.indexOf(greetingText)) fail(`${template.id} ${where}: offer card sits below the letter`);
 
     if (!/<a class="e-on-deep"[^>]*>[^<]*20%[^<]*<\/a>/.test(html)) {
       fail(`${template.id} ${where}: button does not state the discount`);
@@ -341,7 +345,7 @@ console.log('- the reset email carries no password');
 console.log('- the welcome email claims a trial only when there is one');
 console.log('- no email offers a document that was not bought');
 console.log('- no reminder shows the IQ score or the discount code');
-console.log('- a reminder with a discount states it in the subject, an offer card and the button');
+console.log('- a reminder whose copy carries a discount states it in the subject and on the button');
 console.log('- a reminder sent with no discount offers none');
 console.log('- marketing emails carry an unsubscribe link; transactional ones do not');
 console.log('- every message ships dark-mode rules');

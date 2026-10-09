@@ -74,20 +74,20 @@ export const adminSchemas = {
     description:
       'One rung of the sequence. `key` is permanent — every send-log row references it — while label, delay, code and template are freely editable.',
     properties: {
-      key: { type: 'string', example: 'step_24h' },
-      label: { type: 'string', example: '24 hours — 20% off' },
+      key: { type: 'string', example: 'step_72h' },
+      label: { type: 'string', example: '72 hours — 20% off' },
       enabled: { type: 'boolean', example: true },
       delay_hours: {
         type: 'number',
         description: 'Hours after quiz submission. Fractional values allowed, for testing.',
-        example: 24
+        example: 72
       },
       discount_code: {
         type: 'string',
         description: 'A code from data/discount-codes.json. Empty means no discount.',
         example: 'K75QSQC'
       },
-      template_id: { type: 'string', example: 'marketing_reminder_day1' }
+      template_id: { type: 'string', example: 'marketing_reminder_day3' }
     }
   },
   EmailMarketingSettings: {
@@ -114,14 +114,14 @@ export const adminSchemas = {
     type: 'object',
     description: 'One entry of the template master (src/emails/registry.ts).',
     properties: {
-      id: { type: 'string', example: 'marketing_reminder_day1' },
-      name: { type: 'string', example: 'Day 1 — your report is waiting (20% off)' },
+      id: { type: 'string', example: 'marketing_reminder_day3' },
+      name: { type: 'string', example: 'Day 3 — special offer (20% off)' },
       description: { type: 'string' },
       category: {
         type: 'string',
         enum: ['marketing', 'transactional'],
         description:
-          'Marketing designs run the abandoned-checkout ladder; transactional ones follow a purchase. The step picker offers marketing only; test-send offers both.',
+          'Marketing designs run the abandoned-checkout ladder; transactional ones follow a purchase. The step picker offers marketing only.',
         example: 'marketing'
       },
       params: {
@@ -177,8 +177,8 @@ export const adminSchemas = {
       customer_id: { type: 'string', example: '5068' },
       customer_quiz_result_id: { type: 'string', nullable: true, example: '10068' },
       email: { type: 'string', format: 'email' },
-      step_key: { type: 'string', example: 'step_48h' },
-      template_id: { type: 'string', example: 'marketing_reminder_day2' },
+      step_key: { type: 'string', example: 'step_72h' },
+      template_id: { type: 'string', example: 'marketing_reminder_day3' },
       template_name: {
         type: 'string',
         description: 'Resolved from the template master for display; the row stores only the id.'
@@ -889,9 +889,9 @@ const adminEmailMarketingPaths = {
   '/admin/email-marketing/test-send': {
     post: {
       tags: ['Admin'],
-      summary: 'Send a test email',
+      summary: 'Send a test of one step',
       description:
-        'Delivers any template — marketing or transactional — to a chosen address with sample data. Writes no tracking row, so nobody loses their place in the sequence. A discount code is always attached — the one given, or the smallest real one — because these designs write the discount into their copy.',
+        'Delivers one step of the saved sequence — its template, with its discount code, or the no-discount copy for a step on "No discount" — to a chosen address with a sample customer. Built by the same code as a real send, so the subject, offer and checkout link are what the step sends. Reads the saved settings, so unsaved edits are not tested. A disabled step can be tested. Writes no tracking row, so nobody loses their place in the sequence.',
       security: [{ AdminAuth: [] }],
       requestBody: {
         required: true,
@@ -899,12 +899,11 @@ const adminEmailMarketingPaths = {
           'application/json': {
             schema: {
               type: 'object',
-              required: ['template_id', 'to'],
+              required: ['step_key', 'to'],
               properties: {
-                template_id: { type: 'string', example: 'marketing_reminder_day3' },
+                step_key: { type: 'string', example: 'step_24h' },
                 to: { type: 'string', format: 'email' },
-                language: { type: 'string', enum: ['ja', 'en'], default: 'ja' },
-                discount_code: { type: 'string', example: 'K75QSQC' }
+                language: { type: 'string', enum: ['ja', 'en'], default: 'ja' }
               }
             }
           }
@@ -937,6 +936,10 @@ const adminEmailMarketingPaths = {
         },
         400: { $ref: '#/components/responses/ValidationError' },
         401: { $ref: '#/components/responses/Unauthorized' },
+        404: {
+          description: 'No step with that key in the saved sequence — it was added or removed without saving.',
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+        },
         409: {
           description: 'Email sending is disabled (ZEPTOMAIL_ENABLED=false).',
           content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }

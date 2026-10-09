@@ -149,18 +149,18 @@ export class AdminEmailMarketingController {
   /**
    * POST /admin/email-marketing/test-send
    *
-   * Sends one design to a chosen address with sample data. Writes no tracking
-   * row: a test must not consume anyone's place in the sequence.
+   * Sends one saved step — its template, with its discount code — to a chosen
+   * address with a sample customer. Writes no tracking row: a test must not
+   * consume anyone's place in the sequence.
    */
   static async testSend(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { template_id, to, language, discount_code } = req.body;
+      const { step_key, to, language } = req.body;
 
       const result = await emailMarketingService.sendTest({
-        templateId: template_id,
+        stepKey: step_key,
         to,
-        language,
-        discountCode: discount_code ?? null
+        language
       });
 
       ResponseUtil.success(res, result, `Test email sent to ${to}`);

@@ -73,11 +73,11 @@ const emailMarketingLogSchema = z.object({
 });
 
 const emailTestSendSchema = z.object({
-  template_id: z.string().trim().min(1).max(100),
+  // A step, not a template: its template and discount code come from the saved
+  // sequence, so the test is the email that step actually sends.
+  step_key: z.string().trim().min(1, 'Pick a step to test').max(50),
   to: z.string().email('A valid recipient address is required'),
-  language: z.enum(['ja', 'en']).default('ja'),
-  // Optional: a design can be previewed without a discount panel.
-  discount_code: z.string().trim().max(50).optional()
+  language: z.enum(['ja', 'en']).default('ja')
 });
 
 // ---------------------------------------------------------------------------

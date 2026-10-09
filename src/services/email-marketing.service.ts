@@ -471,37 +471,44 @@ export class EmailMarketingService {
     );
   }
 
-  /** The least valuable real code, used to dress a preview. Null if none exist. */
-  private smallestDiscountCode(): string | null {
-    const codes = Object.values(discountCodes);
-    if (codes.length === 0) return null;
-    return codes.reduce((min, entry) => (entry.discount < min.discount ? entry : min)).code;
-  }
-
   // -------------------------------------------------------------------------
   // Admin reads
   // -------------------------------------------------------------------------
 
   /**
-   * Sends one template to a chosen address with placeholder data, so an
-   * operator can see a design in their own inbox before it goes to customers.
+   * Sends one step of the sequence to a chosen address, so an operator can see
+   * in their own inbox exactly what that rung sends: the step's template with
+   * the step's discount code — or the no-discount copy, for a step on "No
+   * discount".
    *
-   * Deliberately writes no tracking row: this is not a step, and it must not
-   * consume the recipient's place in the sequence.
+   * Reads the saved settings, not the editor's, so what is tested is what the
+   * next run would send. A disabled step can still be tested — that is how it
+   * gets checked before being switched on.
    *
-   * A code is always attached — the caller's, or the smallest real one — because
-   * these designs write the discount into their copy, and a preview with no code
-   * would show "%OFF" rather than the email a customer would actually receive.
+   * The context comes from `buildContext`, the function the run itself uses,
+   * fed a sample candidate. Only the person is invented: the subject, the
+   * offer and the checkout link are the real step's.
+   *
+   * Deliberately writes no tracking row: a test must not consume the
+   * recipient's place in the sequence.
    */
   async sendTest(input: {
-    templateId: string;
+    stepKey: string;
     to: string;
     language: EmailLanguage;
-    discountCode?: string | null;
   }): Promise<{ subject: string; message_id: string | null }> {
-    const template = getTemplate(input.templateId);
-    if (!template) {
-      throw new AppError(`Unknown email template "${input.templateId}".`, 400);
+    const settings = await emailMarketingSettingsService.getConfig();
+    const step = settings.steps.find((s) => s.key === input.stepKey);
+
+    if (!step) {
+      throw new AppError(
+        `No step "${input.stepKey}" in the saved sequence. Save your changes, then test.`,
+        404
+      );
+    }
+
+    if (!getTemplate(step.template_id)) {
+      throw new AppError(`Unknown email template "${step.template_id}".`, 400);
     }
 
     const problem = emailService.configurationProblem();
@@ -509,22 +516,27 @@ export class EmailMarketingService {
       throw new AppError(problem, 500);
     }
 
-    const code = input.discountCode
-      ? input.discountCode.toUpperCase()
-      : (this.smallestDiscountCode() ?? null);
-    const percent = code ? (discountCodes[code]?.discount ?? null) : null;
-    const siteUrl = config.funnelUrl;
-
-    const ctaUrl = new URL(`${siteUrl}/${input.language}/checkout`);
-    // A sample id, not a real session: the link proves the design, and must not
-    // hand whoever receives the test a working checkout for someone else's quiz.
-    ctaUrl.searchParams.set('quiz_id', EncryptionUtil.encryptId('0'));
-    if (code) ctaUrl.searchParams.set('price_dis', code);
-
     const sampleName = input.language === 'ja' ? 'テスト' : 'Alex';
 
+    const context = this.buildContext(
+      {
+        // Sample ids, not a real session: the link proves the step, and must
+        // not hand whoever receives the test a working checkout for someone
+        // else's quiz, nor an opt-out that unsubscribes a real customer.
+        quiz_id: '0',
+        customer_id: '0',
+        email: input.to,
+        first_name: sampleName,
+        language: input.language,
+        iq_score: 124,
+        // As if the step had just come due for this person.
+        created_at: new Date(Date.now() - step.delay_hours * 3_600_000)
+      },
+      step
+    );
+
     const result = await emailService.send({
-      templateId: input.templateId,
+      templateId: step.template_id,
       to: input.to,
       toName: null,
       // An operator asking to see a design in their own inbox has asked for it
@@ -532,32 +544,7 @@ export class EmailMarketingService {
       // customer who opted out would make the preview silently do nothing,
       // which is the one thing a preview must not do.
       ignoreUnsubscribe: true,
-      // Every parameter any template might declare is filled with a sample, so
-      // one endpoint can preview a marketing nudge and a transactional receipt
-      // alike. The password is visibly fake — a preview must never be mistaken
-      // for a real credential.
-      context: createEmailContext(
-        { email: input.to, language: input.language, site_url: siteUrl },
-        {
-          first_name: sampleName,
-          honorific_name: honorific(input.language, sampleName),
-          iq_score: 124,
-          discount_code: code,
-          discount_percent: percent,
-          cta_url: ctaUrl.toString(),
-          hours_since_quiz: 24,
-          // A sample link, for the same reason as the quiz id above: the
-          // operator sees the footer as a customer will, and the link resolves
-          // to no real account, so a preview cannot opt anybody out.
-          unsubscribe_url: unsubscribeUrlFor('0', input.language),
-          login_email: input.to,
-          login_password: 'SAMP-LE00-TEST',
-          login_url: config.brainTraining.loginUrl || siteUrl,
-          program_name: config.brainTraining.name[input.language],
-          first_sale_report_url: `${siteUrl}/${input.language}/result?quiz_id=sample`,
-          cross_sale_report_url: `${siteUrl}/${input.language}/result/report?quiz_id=sample`
-        }
-      )
+      context
     });
 
     if (result.status === 'failed') {

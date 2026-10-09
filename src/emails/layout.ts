@@ -729,7 +729,13 @@ interface LayoutOptions {
   language: EmailLanguage;
   /** Small line above the headline — usually the urgency cue. */
   eyebrow?: string;
-  headline: string;
+  /**
+   * The h1. Left out by a design that reads as a plain letter, whose body
+   * then starts directly under the masthead.
+   */
+  headline?: string;
+  /** The document title, which some webmail clients show. Defaults to the headline. */
+  title?: string;
   /** Pre-rendered HTML for the message body, directly under the headline. */
   body: string;
   /** Right-hand label in the masthead, e.g. "Report ready". */
@@ -990,6 +996,7 @@ export function renderLayout(options: LayoutOptions): string {
     language,
     eyebrow,
     headline,
+    title,
     body,
     mastheadTag,
     previewText,
@@ -1063,7 +1070,7 @@ export function renderLayout(options: LayoutOptions): string {
     '<meta name="color-scheme" content="light dark" />',
     '<meta name="supported-color-schemes" content="light dark" />',
     '<meta name="x-apple-disable-message-reformatting" />',
-    '<title>' + escapeHtml(headline) + '</title>',
+    '<title>' + escapeHtml(title ?? headline ?? '') + '</title>',
     '<!--[if mso]>',
     '<noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript>',
     '<![endif]-->',
@@ -1139,13 +1146,15 @@ export function renderLayout(options: LayoutOptions): string {
     // Headline and lede
     row(
       eyebrowRow +
-        '<h1 class="h1 e-ink" style="margin:0 0 14px 0; font-family:' +
-        display +
-        '; font-size:28px; line-height:36px; font-weight:bold; letter-spacing:-0.6px; color:' +
-        INK +
-        ';">' +
-        escapeHtml(headline) +
-        '</h1>' +
+        (headline
+          ? '<h1 class="h1 e-ink" style="margin:0 0 14px 0; font-family:' +
+            display +
+            '; font-size:28px; line-height:36px; font-weight:bold; letter-spacing:-0.6px; color:' +
+            INK +
+            ';">' +
+            escapeHtml(headline) +
+            '</h1>'
+          : '') +
         '<div style="font-family:' +
         bodyFont +
         ';">' +
