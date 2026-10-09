@@ -142,6 +142,11 @@ export const adminSchemas = {
         type: 'object',
         properties: { ja: { type: 'string' }, en: { type: 'string' } }
       },
+      subject_without_discount: {
+        type: 'object',
+        description: 'The subject sent when the step has no discount code. Same as `subject` for a design whose subject never mentions one.',
+        properties: { ja: { type: 'string' }, en: { type: 'string' } }
+      },
       hosted_in_zeptomail: {
         type: 'boolean',
         description:

@@ -407,6 +407,9 @@ export function getEmailMarketingOptions() {
       category: t.category,
       params: [...t.params],
       subject: t.subject,
+      // The step editor names each design by the subject it would send, which
+      // for a step on "No discount" is this one.
+      subject_without_discount: t.subjectWithoutDiscount ?? t.subject,
       // Lets the step editor offer "No discount" only where the save accepts it.
       requires_discount: templateRequiresDiscount(t)
     })),
