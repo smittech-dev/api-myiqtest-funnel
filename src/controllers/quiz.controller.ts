@@ -8,7 +8,11 @@ export class QuizController {
    */
   static async submitQuiz(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const ipAddress = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress;
+      // `req.ip`, not the raw X-Forwarded-For header: behind a proxy that header
+      // is a list ("client, proxy, ..."), and an IPv6 client plus one hop is
+      // already longer than the varchar(45) column — the insert fails and the
+      // quiz is lost. With `trust proxy` on (production) `req.ip` is the client.
+      const ipAddress = req.ip || req.socket.remoteAddress;
       const data = await quizService.submitQuiz(req.body, ipAddress);
       ResponseUtil.success(res, data, 'Quiz submitted successfully', 201);
     } catch (error) {
