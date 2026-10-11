@@ -66,7 +66,7 @@ export class QuizService {
         duration_seconds: duration_seconds || null,
         language: language.toLowerCase() === 'en' ? 'en' : 'ja',
         // Clamped to the column: an over-long value must never cost the quiz.
-        ip_address: ipAddress ? ipAddress.slice(0, 45) : null,
+        ip_address: ipAddress ? ipAddress.slice(0, 100) : null,
         country_code: language.toLowerCase() === 'ja' ? 'JP' : 'US',
         landing_url_details: landing_url_details || null,
         report_urls: null
