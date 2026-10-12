@@ -63,7 +63,7 @@ export class CustomerQuizResult {
   @Column({ type: 'varchar', length: 10, default: 'ja' })
   language!: string;
 
-  @Column({ type: 'varchar', length: 45, nullable: true })
+  @Column({ type: 'text', nullable: true })
   ip_address!: string | null;
 
   @Column({ type: 'varchar', length: 2, default: 'JP' })
