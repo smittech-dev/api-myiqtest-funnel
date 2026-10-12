@@ -29,42 +29,59 @@ export class QuizService {
       landing_url_details
     } = payload;
 
-    // 1. Find or create Customer with inactive status and temporary password hash
-    let customer = await this.customerRepository.findOne({ where: { email } });
-    if (!customer) {
-      const tempPassword = crypto.randomBytes(16).toString('hex');
-      const passwordHash = crypto.createHash('sha256').update(tempPassword).digest('hex');
+    // 1–2. Customer and quiz result are written in one transaction. Before, the
+    // customer was committed on its own, so any failure saving the quiz (or in
+    // between) left a customer with no quiz behind it.
+    const { customer, savedResult } = await AppDataSource.transaction(async (manager) => {
+      const customerRepo = manager.getRepository(Customer);
+      const quizRepo = manager.getRepository(CustomerQuizResult);
 
-      customer = this.customerRepository.create({
+      // Find or create Customer with inactive status and temporary password hash.
+      // `orIgnore` covers two submits for a new email racing each other: the
+      // loser skips the insert and reads back the winner's row instead of
+      // failing on the unique email constraint.
+      let customer = await customerRepo.findOne({ where: { email } });
+      if (!customer) {
+        const tempPassword = crypto.randomBytes(16).toString('hex');
+        const passwordHash = crypto.createHash('sha256').update(tempPassword).digest('hex');
+
+        await customerRepo
+          .createQueryBuilder()
+          .insert()
+          .values({
+            email,
+            password_hash: passwordHash,
+            status: 'inactive' // Customer cannot log in until activated
+          })
+          .orIgnore()
+          .execute();
+        customer = await customerRepo.findOneOrFail({ where: { email } });
+      }
+
+      const quizResult = quizRepo.create({
+        customer_id: customer.id,
         email,
-        password_hash: passwordHash,
-        status: 'inactive' // Customer cannot log in until activated
+        iq_score: Math.round(iq_score),
+        category_scores: category_scores || null,
+        duration_seconds: duration_seconds || null,
+        language: language.toLowerCase() === 'en' ? 'en' : 'ja',
+        // Clamped to the column: an over-long value must never cost the quiz.
+        ip_address: ipAddress ? ipAddress.slice(0, 100) : null,
+        country_code: language.toLowerCase() === 'ja' ? 'JP' : 'US',
+        landing_url_details: landing_url_details || null,
+        report_urls: null
       });
-      await this.customerRepository.save(customer);
-    }
 
-    // 1b. Verify the address with Reoon the first time we see it. Best-effort: a
-    // provider outage must not stop someone submitting, and an already-verified
-    // customer is not re-checked (each call costs a credit).
-    await this.verifyCustomerEmail(customer);
-
-    // 2. Create Quiz Result entry
-    const quizResult = this.quizResultRepository.create({
-      customer_id: customer.id,
-      email,
-      iq_score: Math.round(iq_score),
-      category_scores: category_scores || null,
-      duration_seconds: duration_seconds || null,
-      language: language.toLowerCase() === 'en' ? 'en' : 'ja',
-      ip_address: ipAddress || null,
-      country_code: language.toLowerCase() === 'ja' ? 'JP' : 'US',
-      landing_url_details: landing_url_details || null,
-      report_urls: null
+      return { customer, savedResult: await quizRepo.save(quizResult) };
     });
 
-    const savedResult = await this.quizResultRepository.save(quizResult);
+    // 3. Verify the address with Reoon the first time we see it. Best-effort: a
+    // provider outage must not stop someone submitting, and an already-verified
+    // customer is not re-checked (each call costs a credit). Runs after the
+    // commit so a slow provider never holds the transaction open.
+    await this.verifyCustomerEmail(customer);
 
-    // 3. Encrypt the database quiz result ID
+    // 4. Encrypt the database quiz result ID
     const encryptedQuizId = EncryptionUtil.encryptId(savedResult.id);
 
     return {
