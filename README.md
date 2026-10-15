@@ -611,7 +611,7 @@ What is in it today:
 
 | Template id | Category | Sent when |
 |---|---|---|
-| `marketing_reminder_day1` … `day5` | marketing | The abandoned-checkout ladder (see below) |
+| `marketing_reminder_1` … `marketing_reminder_4` | marketing | The abandoned-checkout ladder (see below) |
 | `transactional_welcome` | transactional | The first sale settles — carries the myIQ Cognitive Training Program credentials |
 | `transactional_report_ready` | transactional | The customer finishes the funnel — links their reports |
 
@@ -642,7 +642,7 @@ ZeptoMail renders its own hosted template of that key instead, receiving the dec
 parameters as `merge_info` at `/v1.1/email/template`:
 
 ```bash
-ZEPTOMAIL_TEMPLATE_MARKETING_REMINDER_DAY1=2518b.53ab...
+ZEPTOMAIL_TEMPLATE_MARKETING_REMINDER_1=2518b.53ab...
 ```
 
 Both paths take the same template id and the same parameters, so moving a design into
@@ -705,10 +705,10 @@ ladder that sends nothing until someone switches it on:
 
 | Step | Delay | Discount | Template |
 |---|---|---|---|
-| `step_24h` | 24 hours | — | `marketing_reminder_day1` |
-| `step_48h` | 48 hours | — | `marketing_reminder_day2` |
-| `step_72h` | 72 hours | 20% | `marketing_reminder_day3` |
-| `step_5d` | 5 days | 50% | `marketing_reminder_day5` |
+| `step_24h` | 24 hours | — | `marketing_reminder_1` |
+| `step_48h` | 48 hours | — | `marketing_reminder_2` |
+| `step_72h` | 72 hours | 20% | `marketing_reminder_3` |
+| `step_5d` | 5 days | 50% | `marketing_reminder_4` |
 
 Templates 1–2 never mention a price, so they suit a step with no code. Templates 3–4 print the
 step's percent in the subject, the copy and the button, so the panel will not save them on

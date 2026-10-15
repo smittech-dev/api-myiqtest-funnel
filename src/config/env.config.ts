@@ -5,7 +5,7 @@ dotenv.config();
  * Per-template ZeptoMail template keys, read from the environment by
  * convention: `ZEPTOMAIL_TEMPLATE_<TEMPLATE_ID_UPPERCASED>`.
  *
- *   ZEPTOMAIL_TEMPLATE_MARKETING_REMINDER_DAY1=2518b.53a...
+ *   ZEPTOMAIL_TEMPLATE_MARKETING_REMINDER_1=2518b.53a...
  *
  * Setting one makes that template render inside ZeptoMail (the design is
  * maintained in their editor and the app only supplies merge_info); leaving it

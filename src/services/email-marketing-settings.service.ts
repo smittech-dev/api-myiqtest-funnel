@@ -151,36 +151,36 @@ export const DEFAULT_EMAIL_MARKETING_CONFIG: EmailMarketingConfig = {
   max_age_hours: 240, // 10 days — the last step plus a few days of slack
   steps: [
     {
-      key: 'step_24h',
-      label: '24 hours — no discount',
+      key: 'step_1',
+      label: 'Step 1',
       enabled: true,
       delay_hours: 24,
       discount_code: '',
-      template_id: 'marketing_reminder_day1'
+      template_id: 'marketing_reminder_1'
     },
     {
-      key: 'step_48h',
-      label: '48 hours — no discount',
+      key: 'step_2',
+      label: 'Step 2',
       enabled: true,
       delay_hours: 48,
       discount_code: '',
-      template_id: 'marketing_reminder_day2'
+      template_id: 'marketing_reminder_2'
     },
     {
-      key: 'step_72h',
-      label: '72 hours — 20% off',
+      key: 'step_3',
+      label: 'Step 3',
       enabled: true,
       delay_hours: 72,
       discount_code: 'K75QSQC',
-      template_id: 'marketing_reminder_day3'
+      template_id: 'marketing_reminder_3'
     },
     {
-      key: 'step_5d',
-      label: '5 days — 50% off',
+      key: 'step_4',
+      label: 'Step 5',
       enabled: true,
       delay_hours: 120,
       discount_code: '5G4A2TC',
-      template_id: 'marketing_reminder_day5'
+      template_id: 'marketing_reminder_4'
     }
   ]
 };

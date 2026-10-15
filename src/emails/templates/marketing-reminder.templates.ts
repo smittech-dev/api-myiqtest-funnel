@@ -55,8 +55,8 @@ interface ReminderDefinition {
 
 const DEFINITIONS: ReminderDefinition[] = [
   {
-    id: 'marketing_reminder_day1',
-    name: 'Day 1 — your results are ready to unlock',
+    id: 'marketing_reminder_1',
+    name: 'Template 1 — Your myIQ results are ready to be unlocked!',
     description:
       'First nudge, ~24h after the quiz. No discount: the report is ready and one click away.',
     offer: false,
@@ -86,8 +86,8 @@ const DEFINITIONS: ReminderDefinition[] = [
     }
   },
   {
-    id: 'marketing_reminder_day2',
-    name: 'Day 2 — there is more to discover',
+    id: 'marketing_reminder_2',
+    name: 'Template 2 — Ready to discover more about your myIQ results?',
     description:
       'Second nudge, ~48h after the quiz. No discount: the quiz was only the beginning, the report is the rest.',
     offer: false,
@@ -121,8 +121,8 @@ const DEFINITIONS: ReminderDefinition[] = [
   {
     // The percent is the step's code, never written into the copy: it is set
     // per step in the admin, and the email must say what checkout applies.
-    id: 'marketing_reminder_day3',
-    name: 'Day 3 — special offer (20% off)',
+    id: 'marketing_reminder_3',
+    name: 'Template 3 — A special offer: Get 20% off your myIQ Report!',
     description:
       'Third nudge, ~72h after the quiz. The first discount of the sequence; needs a code (20% by default).',
     offer: true,
@@ -156,8 +156,8 @@ const DEFINITIONS: ReminderDefinition[] = [
     }
   },
   {
-    id: 'marketing_reminder_day5',
-    name: 'Day 5 — final offer (50% off)',
+    id: 'marketing_reminder_4',
+    name: 'Template 4 — Your exclusive offer: 50% off your myIQ Report!',
     description:
       'Last nudge, ~5 days after the quiz. The biggest discount, closing the sequence; needs a code (50% by default).',
     offer: true,

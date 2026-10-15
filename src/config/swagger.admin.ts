@@ -87,7 +87,7 @@ export const adminSchemas = {
         description: 'A code from data/discount-codes.json. Empty means no discount.',
         example: 'K75QSQC'
       },
-      template_id: { type: 'string', example: 'marketing_reminder_day3' }
+      template_id: { type: 'string', example: 'marketing_reminder_3' }
     }
   },
   EmailMarketingSettings: {
@@ -114,7 +114,7 @@ export const adminSchemas = {
     type: 'object',
     description: 'One entry of the template master (src/emails/registry.ts).',
     properties: {
-      id: { type: 'string', example: 'marketing_reminder_day3' },
+      id: { type: 'string', example: 'marketing_reminder_3' },
       name: { type: 'string', example: 'Day 3 — special offer (20% off)' },
       description: { type: 'string' },
       category: {
@@ -178,7 +178,7 @@ export const adminSchemas = {
       customer_quiz_result_id: { type: 'string', nullable: true, example: '10068' },
       email: { type: 'string', format: 'email' },
       step_key: { type: 'string', example: 'step_72h' },
-      template_id: { type: 'string', example: 'marketing_reminder_day3' },
+      template_id: { type: 'string', example: 'marketing_reminder_3' },
       template_name: {
         type: 'string',
         description: 'Resolved from the template master for display; the row stores only the id.'

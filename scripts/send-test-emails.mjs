@@ -287,7 +287,7 @@ const VARIANTS = [
   {
     tag: 'anonymous',
     label: 'no first name captured',
-    only: ['transactional_report_ready', 'marketing_reminder_day1'],
+    only: ['transactional_report_ready', 'marketing_reminder_1'],
     overrides: { first_name: null }
   }
 ];
