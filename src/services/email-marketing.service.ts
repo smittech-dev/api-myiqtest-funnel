@@ -153,8 +153,15 @@ export class EmailMarketingService {
    * the one that is always populated, so it is the one that can be trusted to
    * keep a paying customer out of the list.
    *
-   * The final count subquery drops anyone who has already been through every
-   * enabled step, so a long-lived table does not grow the per-tick workload.
+   * The outer `EXISTS` keeps only people with a step due *now* and not yet
+   * done — the same test `processCandidate` applies, run in SQL. "Has not
+   * finished the sequence" is not enough: someone between rungs has nothing
+   * due, yet would still take a place in the batch, and because the batch is
+   * oldest-first, once more than `batch_size` people were between rungs the
+   * newest leads went unreached until their second rung was due — so their
+   * first was retired unsent, and the leads behind them were not emailed at
+   * all. It sits outside the `DISTINCT ON` so it filters the quiz the inner
+   * query chose rather than changing which quiz is chosen.
    */
   private async findCandidates(
     settings: EmailMarketingConfig,
@@ -162,6 +169,7 @@ export class EmailMarketingService {
   ): Promise<Candidate[]> {
     const minDelayHours = steps[0].delay_hours;
     const stepKeys = steps.map((s) => s.key);
+    const stepDelays = steps.map((s) => s.delay_hours);
 
     const rows = await AppDataSource.query(
       `
@@ -194,19 +202,37 @@ export class EmailMarketingService {
               AND t.transaction_type = 'first_sale'
               AND t.status = 'succeeded'
           )
-          AND (
-            SELECT COUNT(*)
-            FROM email_marketing_logs l
-            WHERE l.customer_id = q.customer_id
-              AND l.step_key = ANY($3)
-              AND l.status IN ('sent', 'skipped')
-          ) < $4
         ORDER BY q.customer_id, q.created_at DESC
       ) s
+      WHERE EXISTS (
+        SELECT 1
+        FROM unnest($3::text[], $4::float8[]) AS st(step_key, delay_hours)
+        WHERE s.created_at <= NOW() - (st.delay_hours * INTERVAL '1 hour')
+          AND NOT EXISTS (
+            SELECT 1
+            FROM email_marketing_logs l
+            WHERE l.customer_id = s.customer_id
+              AND l.step_key = st.step_key
+              AND (
+                l.status IN ('sent', 'skipped')
+                OR (l.status = 'failed' AND l.attempts >= $5)
+                -- Claimed by a runner that may still be sending it.
+                OR (l.status = 'pending' AND l.updated_at >= $6::timestamptz)
+              )
+          )
+      )
       ORDER BY s.created_at ASC
-      LIMIT $5
+      LIMIT $7
       `,
-      [minDelayHours, settings.max_age_hours, stepKeys, stepKeys.length, settings.batch_size]
+      [
+        minDelayHours,
+        settings.max_age_hours,
+        stepKeys,
+        stepDelays,
+        settings.max_attempts,
+        this.stuckClaimCutoff(),
+        settings.batch_size
+      ]
     );
 
     return rows.map((row: any) => ({
@@ -237,7 +263,7 @@ export class EmailMarketingService {
     });
     const byStep = new Map(history.map((row) => [row.step_key, row]));
 
-    const stuckBefore = new Date(Date.now() - config.emailMarketing.stuckClaimMinutes * 60_000);
+    const stuckBefore = this.stuckClaimCutoff();
 
     const outstanding = dueSteps.filter((step) => {
       const row = byStep.get(step.key);
@@ -275,6 +301,11 @@ export class EmailMarketingService {
       failed: sent ? 0 : 1,
       superseded: supersededCount
     };
+  }
+
+  /** A `pending` claim last touched before this belongs to a runner that died. */
+  private stuckClaimCutoff(): Date {
+    return new Date(Date.now() - config.emailMarketing.stuckClaimMinutes * 60_000);
   }
 
   /**

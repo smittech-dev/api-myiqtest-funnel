@@ -733,7 +733,9 @@ what "stop the emails, now" needs to mean from the admin panel.
   (The check walks transactions through `customer_quiz_results`, because
   `transactions.customer_id` is nullable and the quiz link is the one always populated.)
 - Their most recent quiz is older than the first step's delay, and newer than `max_age_hours`.
-- They have not already been through every enabled step.
+- At least one enabled step is **due now** and not yet done — not sent, skipped, failed
+  `max_attempts` times, or claimed by a run still sending it. Someone waiting between rungs is
+  not a candidate, so they never take one of the `batch_size` places a newly due lead needs.
 
 Repeat quiz-takers collapse to **one** candidate — `DISTINCT ON (customer_id)`, timed from
 their latest attempt. The sequence is addressed to a person, not to a submission.
