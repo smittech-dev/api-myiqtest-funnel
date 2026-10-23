@@ -418,6 +418,12 @@ export class PaymentService {
 
   /**
    * Report the subscription this customer already has, for repeat confirm calls.
+   *
+   * Scoped to the **customer**, not the quiz attempt. A customer may take the
+   * test and pay for it as many times as they like, but they hold one training
+   * plan. Keyed on the quiz result this found nothing on a second attempt, and
+   * the caller went on to open another subscription — the same card billed
+   * twice every 28 days, which is what `liveSubscriptionForCustomer` closes.
    */
   private async existingSubscriptionOutcome(
     quizResult: CustomerQuizResult
@@ -426,10 +432,7 @@ export class PaymentService {
       return { created: false, subscription_id: null, status: null, reason: 'no customer record' };
     }
 
-    const record = await this.subscriptionRepository.findOne({
-      where: { customer_quiz_result_id: quizResult.id },
-      order: { id: 'DESC' }
-    });
+    const record = await this.liveSubscriptionForCustomer(quizResult.customer_id);
 
     if (!record) {
       return { created: false, subscription_id: null, status: null, reason: 'no subscription' };
@@ -441,6 +444,84 @@ export class PaymentService {
       status: record.status,
       reason: null
     };
+  }
+
+  /**
+   * The customer's subscription that is still running, newest first.
+   *
+   * Ended ones are stepped over rather than excluded in SQL — a customer has
+   * one or two of these rows, so reading them and picking is cheaper than the
+   * `NOT IN` it would take to say the same thing, and
+   * `idx_subscriptions_customer_id` covers the lookup either way.
+   *
+   * Stepping over them is the point: a customer who cancelled and came back
+   * must be able to subscribe again, so "already has one" has to mean a plan
+   * that is actually live, not a plan they once had.
+   */
+  private async liveSubscriptionForCustomer(
+    customerId: string
+  ): Promise<CustomerSubscription | null> {
+    const records = await this.subscriptionRepository.find({
+      where: { customer_id: customerId },
+      order: { created_at: 'DESC' }
+    });
+
+    return records.find((record) => !ENDED_STATUSES.has(record.status)) ?? null;
+  }
+
+  /**
+   * The customer's still-running subscription as Stripe itself has it.
+   *
+   * Asked in addition to our own table, because the table can be missing a
+   * subscription that exists: a creation that succeeded at Stripe and then
+   * failed to write its row leaves exactly that gap, and that row is all the
+   * local check can see. The Stripe customer is resolved from the email
+   * address (`getOrCreateStripeCustomer`), so this asks "does this address
+   * already have a plan" where the billing actually lives.
+   *
+   * Never throws — a list that cannot be read is reported as no subscription,
+   * and the idempotency key on creation is what stops that becoming a second
+   * plan.
+   */
+  private async liveStripeSubscriptionFor(
+    stripeCustomerId: string,
+    email: string
+  ): Promise<Stripe.Subscription | null> {
+    const customerIds = new Set([stripeCustomerId]);
+
+    // One address can own more than one Stripe Customer — one made before the
+    // funnel began reusing them by email, say, or one created while a lookup
+    // was failing. The plan is unique per person, so every Customer that
+    // address owns is in scope, not just the one this payment sits on.
+    try {
+      const matches = await this.stripe.customers.list({ email, limit: 20 });
+      for (const match of matches.data) {
+        if (!match.deleted) {
+          customerIds.add(match.id);
+        }
+      }
+    } catch (err: any) {
+      logger.warn(`Could not list Stripe customers for ${email}: ${err.message}`);
+    }
+
+    for (const id of customerIds) {
+      try {
+        const list = await this.stripe.subscriptions.list({
+          customer: id,
+          status: 'all',
+          limit: 100
+        });
+
+        const live = list.data.find((sub) => !ENDED_STATUSES.has(sub.status));
+        if (live) {
+          return live;
+        }
+      } catch (err: any) {
+        logger.warn(`Could not list Stripe subscriptions for customer ${id}: ${err.message}`);
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -470,13 +551,17 @@ export class PaymentService {
         return subscriptionSkipped('quiz result has no customer record');
       }
 
-      // One subscription per quiz attempt — a repeated confirm must not create another,
-      // but a second quiz by the same customer gets its own plan.
-      const existing = await this.subscriptionRepository.findOne({
-        where: { customer_quiz_result_id: quizResult.id }
-      });
+      // One subscription per customer, however many times they take the test
+      // and pay for it. A repeated confirm, a webhook landing beside it, and a
+      // whole second quiz attempt months later all have to arrive here and
+      // find the plan that already exists.
+      const existing = await this.liveSubscriptionForCustomer(quizResult.customer_id);
 
       if (existing) {
+        logger.info(
+          `Quiz ${quizResult.id}: customer ${quizResult.customer_id} already holds subscription ` +
+            `${existing.stripe_subscription_id} (${existing.status}) — not opening another`
+        );
         return {
           created: true,
           subscription_id: existing.stripe_subscription_id,
@@ -497,6 +582,27 @@ export class PaymentService {
 
       if (!customerId || !paymentMethodId) {
         return subscriptionSkipped('the first sale did not save a reusable card');
+      }
+
+      // Stripe is asked as well as our own table, which can be missing a
+      // subscription that exists — a creation that succeeded there and then
+      // failed to write its row leaves exactly that gap, and that row is all
+      // the check above can see. Adopting what Stripe has also repairs the
+      // gap, so the next confirm is answered locally.
+      const atStripe = await this.liveStripeSubscriptionFor(customerId, quizResult.email);
+
+      if (atStripe) {
+        logger.warn(
+          `Quiz ${quizResult.id}: Stripe already has subscription ${atStripe.id} ` +
+            `(${atStripe.status}) for ${quizResult.email} with no row here — adopting it`
+        );
+        await this.upsertSubscriptionRecord(atStripe, quizResult.customer_id, quizResult.id);
+        return {
+          created: true,
+          subscription_id: atStripe.id,
+          status: atStripe.status,
+          reason: null
+        };
       }
 
       // Make the saved card the default for future invoices
@@ -524,16 +630,23 @@ export class PaymentService {
         }
       }, {
         // The webhook and the confirm endpoint both settle a first sale, and
-        // they can arrive at the same instant — the row check above is a read,
-        // so both can pass it and both can get here. Without this key that is
-        // two subscriptions on one customer and a double charge every 28 days.
+        // they can arrive at the same instant — every check above is a read,
+        // so both can pass them and both can get here. Without this key that
+        // is two subscriptions on one customer and a double charge every 28
+        // days.
         //
-        // Keyed on the quiz attempt, which is exactly the scope the plan is
-        // scoped to: one attempt, one subscription. Stripe replays the first
-        // response for 24 hours, far longer than the two paths can be apart,
-        // and expires long before a genuine retry of a *failed* creation would
-        // come back — so a real failure is still retryable.
-        idempotencyKey: `first-sale-subscription-${quizResult.id}`
+        // Keyed on the customer, which is the scope the plan is unique to: one
+        // customer, one subscription, however many times they take the test.
+        // Keyed on the quiz attempt it only caught two settles racing over a
+        // single attempt, and left two attempts by one customer free to open a
+        // plan each.
+        //
+        // Stripe replays the first response for 24 hours, far longer than the
+        // settle paths can be apart. A decline does not land here — the
+        // `allow_incomplete` behaviour above returns an `incomplete`
+        // subscription rather than throwing — so what a replay can repeat is a
+        // configuration error, which repeating costs nothing.
+        idempotencyKey: `first-sale-subscription-${quizResult.customer_id}`
       });
 
       await this.upsertSubscriptionRecord(subscription, quizResult.customer_id, quizResult.id);
