@@ -319,7 +319,9 @@ export function offerCard(
       escapeHtml(opts.percent) +
       '%<span style="padding-left:8px; font-size:30px; letter-spacing:0; color:' +
       CORAL_BTN +
-      ';">OFF</span></p>',
+      ';">' +
+      (language === 'ja' ? 'オフ' : 'OFF') +
+      '</span></p>',
     '<p class="e-on-deep" style="margin:0 0 20px 0; font-family:' +
       BODY[language] +
       '; font-size:14px; line-height:22px; color:#ffffff;">' +

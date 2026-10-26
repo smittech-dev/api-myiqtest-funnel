@@ -69,25 +69,27 @@ interface ReminderDefinition {
  * offer reads the same whichever rung it rides on.
  *
  * It carries the button, which is why it replaces it rather than sitting above
- * it: the letter still has exactly one thing to click. The percent and never
- * the code — see the note on params in buildTemplate.
+ * it: the letter still has exactly one thing to click. The button is labelled
+ * by the box rather than by the design, so the Japanese can read without
+ * Latin letters on the one line the reader acts on. The percent and never the
+ * code — see the note on params in buildTemplate.
  */
 const DISCOUNT_BOX: Record<
   EmailLanguage,
-  { label: string; subline: string; save: string; note: string }
+  { label: string; subline: string; cta: string; note: string }
 > = {
   ja: {
     label: '特別オファー',
     subline: 'あなた専用のmyIQレポートに適用されます',
-    save: ' — {{discount_percent}}%OFF',
+    cta: 'マイIQレポートを受け取る — {{discount_percent}}%オフ',
     note: 'クーポンコードの入力は不要です。割引はお支払い画面で自動的に適用されます。'
   },
   en: {
     label: 'Special offer',
     subline: 'on your personalized myIQ Report',
-    // Appended to the design's own button label. A no-break space keeps
-    // "Save 20%" together when the button wraps on a phone.
-    save: ' — Save {{discount_percent}}%',
+    // A no-break space keeps "Save 20%" together when the button wraps on a
+    // phone.
+    cta: 'Unlock myIQ Report — Save {{discount_percent}}%',
     note: 'No code needed — the discount is applied automatically at checkout.'
   }
 };
@@ -338,7 +340,7 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
               label: box.label,
               percent,
               subline: box.subline,
-              cta: { label: asText(source.cta + box.save), url: ctx.cta_url },
+              cta: { label: asText(box.cta), url: ctx.cta_url },
               note: box.note
             });
 
