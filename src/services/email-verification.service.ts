@@ -15,6 +15,7 @@ interface ReoonResponse {
   status?: string;
   overall_score?: number;
   is_safe_to_send?: boolean;
+  is_catch_all?: boolean;
   is_disposable?: boolean;
   error?: string;
   message?: string;
@@ -25,7 +26,7 @@ export interface EmailVerificationResult {
   verified: boolean;
   /** Reoon's 0-100 confidence, when it answered. */
   score: number | null;
-  /** Reoon's own verdict: valid, invalid, disposable, catch_all, unknown, … */
+  /** Reoon's own verdict: safe, invalid, disposable, catch_all, unknown, … */
   status: string | null;
   /** Set when the check could not be completed (disabled, misconfigured, provider down). */
   skippedReason: string | null;
@@ -135,12 +136,20 @@ export class EmailVerificationService {
     const status = payload.status ?? null;
     const score = typeof payload.overall_score === 'number' ? payload.overall_score : null;
 
-    // Score is the primary signal. If Reoon omitted it, fall back to its own verdict.
+    // Every signal must agree, and a missing one counts as a fail. Only power mode
+    // returns overall_score, status 'safe' and is_safe_to_send, so a quick-mode
+    // answer (status 'valid', no score) can never pass.
     const verified =
-      score !== null ? score >= config.emailVerification.minScore : status === 'valid';
+      score !== null &&
+      score >= config.emailVerification.minScore &&
+      status === 'safe' &&
+      payload.is_safe_to_send === true &&
+      payload.is_catch_all !== true;
 
     logger.info(
-      `Email verification for ${email}: status=${status} score=${score} -> ${verified ? 'verified' : 'not verified'}`
+      `Email verification for ${email}: status=${status} score=${score} ` +
+        `safe_to_send=${payload.is_safe_to_send} catch_all=${payload.is_catch_all} ` +
+        `-> ${verified ? 'verified' : 'not verified'}`
     );
 
     return { verified, score, status, skippedReason: null };

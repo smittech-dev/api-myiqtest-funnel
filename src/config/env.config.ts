@@ -100,10 +100,11 @@ export const config = {
     enabled: process.env.EMAIL_VERIFICATION_ENABLED === 'true',
     apiKey: process.env.REOON_API_KEY || '',
     apiUrl: process.env.REOON_API_URL || 'https://emailverifier.reoon.com/api/v1/verify',
-    // 'quick' is fast enough for a request path; 'power' does SMTP checks and is slower
-    mode: process.env.REOON_MODE || 'quick',
-    // Reoon returns overall_score 0-100; at or above this the address counts as verified
-    minScore: parseInt(process.env.EMAIL_VERIFICATION_MIN_SCORE || '80', 10),
+    // Must be 'power': only power mode returns the score, 'safe' status and
+    // is_safe_to_send the verdict needs, so 'quick' marks every address unverified
+    mode: process.env.REOON_MODE || 'power',
+    // Reoon overall_score 0-100; one of the checks an address must pass to count as verified
+    minScore: parseInt(process.env.EMAIL_VERIFICATION_MIN_SCORE || '90', 10),
     timeoutMs: parseInt(process.env.EMAIL_VERIFICATION_TIMEOUT_MS || '8000', 10)
   },
 

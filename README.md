@@ -377,8 +377,8 @@ When an email is first captured by `POST /questions/submit`, it is checked with
 | `EMAIL_VERIFICATION_ENABLED` | `false` | Master on/off switch |
 | `REOON_API_KEY` | — | Your Reoon API key (required when enabled) |
 | `REOON_API_URL` | `https://emailverifier.reoon.com/api/v1/verify` | Endpoint |
-| `REOON_MODE` | `quick` | `quick` (syntax/MX/disposable) or `power` (adds SMTP checks, slower) |
-| `EMAIL_VERIFICATION_MIN_SCORE` | `80` | Reoon `overall_score` at or above which the email counts as verified |
+| `REOON_MODE` | `power` | Must be `power` — `quick` returns no score or `safe` status, so nothing would verify |
+| `EMAIL_VERIFICATION_MIN_SCORE` | `90` | Minimum Reoon `overall_score` (one of the checks below) |
 | `EMAIL_VERIFICATION_TIMEOUT_MS` | `8000` | Abort the provider request after this long |
 
 Behaviour notes:
@@ -386,8 +386,10 @@ Behaviour notes:
 - **Best-effort, never blocking.** A provider outage, timeout, bad key or HTTP error leaves
   `email_verified = false` and the quiz submission still succeeds — verification failing is not a
   reason to lose the lead.
-- The decision is score-based: `overall_score >= EMAIL_VERIFICATION_MIN_SCORE`. If Reoon omits the
-  score, it falls back to `status === 'valid'`.
+- An address counts as verified only when **all** of these hold: `overall_score >=
+  EMAIL_VERIFICATION_MIN_SCORE`, `status === 'safe'`, `is_safe_to_send === true`, and
+  `is_catch_all` is not `true`. A missing field is a fail, so a quick-mode response (status `valid`,
+  no score) is never verified.
 - An already-verified customer is **not re-checked** on later submissions, so repeat quiz attempts
   do not burn extra credits.
 - With the switch off no request is made at all and the column stays `false`.
