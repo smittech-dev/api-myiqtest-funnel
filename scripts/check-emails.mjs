@@ -254,7 +254,7 @@ for (const language of LANGUAGES) {
   //    A design whose copy prints the discount and has no version without one
   //    is exempt: the settings save refuses to schedule it on "No discount".
   const offerWords =
-    language === 'ja' ? ['%OFF', '割引', 'クーポン', '半額'] : ['% off', 'discount', 'coupon', 'half the usual'];
+    language === 'ja' ? ['%OFF', '%オフ', '割引', 'クーポン', '半額'] : ['% off', 'discount', 'coupon', 'half the usual'];
   for (const template of listTemplates('marketing')) {
     if (printsDiscount(template) && !template.subjectWithoutDiscount) continue;
 

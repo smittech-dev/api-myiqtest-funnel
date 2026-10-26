@@ -70,9 +70,8 @@ interface ReminderDefinition {
  *
  * It carries the button, which is why it replaces it rather than sitting above
  * it: the letter still has exactly one thing to click. The button is labelled
- * by the box rather than by the design, so the Japanese can read without
- * Latin letters on the one line the reader acts on. The percent and never the
- * code — see the note on params in buildTemplate.
+ * by the box rather than by the design, so it reads the same on every rung.
+ * The percent and never the code — see the note on params in buildTemplate.
  */
 const DISCOUNT_BOX: Record<
   EmailLanguage,
@@ -80,7 +79,7 @@ const DISCOUNT_BOX: Record<
 > = {
   ja: {
     label: '特別オファー',
-    subline: 'あなた専用のmyIQレポートに適用されます',
+    subline: 'あなた専用のマイIQレポートに適用されます',
     cta: 'マイIQレポートを受け取る — {{discount_percent}}%オフ',
     note: 'クーポンコードの入力は不要です。割引はお支払い画面で自動的に適用されます。'
   },
@@ -103,8 +102,8 @@ const DEFINITIONS: ReminderDefinition[] = [
     offer: false,
     withDiscount: {
       ja: {
-        subject: '【{{discount_percent}}%OFF】myIQの結果をご確認いただける準備が整いました！',
-        preview: 'あなた専用のmyIQレポートを、今なら{{discount_percent}}%OFFでお受け取りいただけます。'
+        subject: '【{{discount_percent}}%オフ】マイIQの結果をご確認いただける準備が整いました！',
+        preview: 'あなた専用のマイIQレポートを、今なら{{discount_percent}}%オフでお受け取りいただけます。'
       },
       en: {
         subject: 'Your myIQ results are ready — unlock them for {{discount_percent}}% off!',
@@ -113,14 +112,14 @@ const DEFINITIONS: ReminderDefinition[] = [
     },
     copy: {
       ja: {
-        subject: 'myIQの結果をご確認いただける準備が整いました！',
-        preview: 'あなた専用のmyIQレポートをご用意しています。',
+        subject: 'マイIQの結果をご確認いただける準備が整いました！',
+        preview: 'あなた専用のマイIQレポートをご用意しています。',
         paragraphs: [
           'IQクイズの受験が完了しました。いよいよ、あなたの結果を詳しく知るときです！',
-          'あなた専用の<strong>myIQレポート</strong>をご用意しています。レポートを受け取って結果を詳しく確認し、あなたの認知的な強みについての洞察を得てください。',
+          'あなた専用の<strong>マイIQレポート</strong>をご用意しています。レポートを受け取って結果を詳しく確認し、あなたの認知的な強みについての洞察を得てください。',
           '<strong>次のステップは、ワンクリックで完了します。</strong>'
         ],
-        cta: 'myIQレポートを受け取る',
+        cta: 'マイIQレポートを受け取る',
         closing: '結果をそのままにしておくのはもったいない。あなた専用のレポートの内容を、ぜひご覧ください！'
       },
       en: {
@@ -144,8 +143,8 @@ const DEFINITIONS: ReminderDefinition[] = [
     offer: false,
     withDiscount: {
       ja: {
-        subject: '【{{discount_percent}}%OFF】myIQの結果を、もっと詳しく知りませんか？',
-        preview: 'あなた専用のmyIQレポートを、今なら{{discount_percent}}%OFFでお受け取りいただけます。'
+        subject: '【{{discount_percent}}%オフ】マイIQの結果を、もっと詳しく知りませんか？',
+        preview: 'あなた専用のマイIQレポートを、今なら{{discount_percent}}%オフでお受け取りいただけます。'
       },
       en: {
         subject: 'Ready to discover more? Unlock your myIQ Report for {{discount_percent}}% off',
@@ -154,15 +153,15 @@ const DEFINITIONS: ReminderDefinition[] = [
     },
     copy: {
       ja: {
-        subject: 'myIQの結果を、もっと詳しく知りませんか？',
-        preview: 'あなた専用のmyIQレポートは、いつでもお受け取りいただけます。',
+        subject: 'マイIQの結果を、もっと詳しく知りませんか？',
+        preview: 'あなた専用のマイIQレポートは、いつでもお受け取りいただけます。',
         paragraphs: [
-          'myIQクイズの受験は完了しましたが、まだ知っていただきたいことがあります！',
-          'あなた専用のmyIQレポートは、いつでもお受け取りいただけます。結果をより詳しく確認し、ご自身の認知能力への理解を深めるための洞察をご覧ください。',
+          'マイIQクイズの受験は完了しましたが、まだ知っていただきたいことがあります！',
+          'あなた専用のマイIQレポートは、いつでもお受け取りいただけます。結果をより詳しく確認し、ご自身の認知能力への理解を深めるための洞察をご覧ください。',
           '<strong>クイズは、ほんの始まりにすぎません。</strong>',
           '次のステップへ進み、今日レポートを受け取りましょう。'
         ],
-        cta: 'myIQレポートを受け取る',
+        cta: 'マイIQレポートを受け取る',
         closing: 'あなたの結果は、いつでもお待ちしています。'
       },
       en: {
