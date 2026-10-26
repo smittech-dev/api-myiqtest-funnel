@@ -45,16 +45,22 @@ export class CustomerService {
     first_name: string;
     last_name: string;
     age: string;
+    gender?: string;
   }): Promise<{
     updated: boolean;
   }> {
-    const { quiz_id, first_name, last_name, age } = params;
+    const { quiz_id, first_name, last_name, age, gender } = params;
 
     const quizResult = await this.findQuizResult(quiz_id);
 
     quizResult.first_name = first_name;
     quizResult.last_name = last_name;
     quizResult.age = age;
+    // Only when it was sent, so a caller that omits it cannot blank a value
+    // already stored.
+    if (gender !== undefined) {
+      quizResult.gender = gender;
+    }
     await this.quizResultRepository.save(quizResult);
 
     // Not awaited: the customer is waiting on this response to reach their
