@@ -71,6 +71,12 @@ function contextFor(language, overrides = {}) {
 const VARIANTS = [
   { suffix: '', label: 'standard', overrides: {} },
   {
+    suffix: '--no-discount',
+    label: 'step on "No discount" (the letter as written, no discount box)',
+    only: ['marketing_reminder_1', 'marketing_reminder_2'],
+    overrides: { discount_code: null, discount_percent: null }
+  },
+  {
     suffix: '--no-upsell',
     label: 'report without the career upsell',
     only: ['transactional_report_ready'],

@@ -1,5 +1,5 @@
 import type { EmailTemplate, EmailLanguage, EmailTemplateContext, EmailTemplateParam } from '../email.types.js';
-import { button, escapeContext, interpolate, paragraph, renderLayout } from '../layout.js';
+import { button, escapeContext, interpolate, offerCard, paragraph, renderLayout } from '../layout.js';
 
 /**
  * The four abandoned-checkout designs, one per rung of the ladder — the admin
@@ -11,8 +11,10 @@ import { button, escapeContext, interpolate, paragraph, renderLayout } from '../
  * rung is a new entry rather than a new file.
  *
  * Each email reads as a short letter — greeting, paragraphs, the button, one
- * closing line — with no headline or offer card around it, so what the
- * customer receives is exactly the copy marketing wrote.
+ * closing line — with no headline around it, so what the customer receives is
+ * exactly the copy marketing wrote. The one addition is the discount box: the
+ * two plain reminders were written without an offer, and when their step
+ * carries a code anyway, the box takes the button's place.
  *
  * Every string may use `{{param}}` placeholders drawn from EmailTemplateContext.
  * Paragraphs and the closing line are injected as HTML, which is how the
@@ -51,15 +53,62 @@ interface ReminderDefinition {
    */
   offer: boolean;
   copy: Record<EmailLanguage, Copy>;
+  /**
+   * For a design written without an offer: the inbox lines it sends instead
+   * when its step carries a code, with the discount box in the letter.
+   *
+   * Its presence is what gives the design two versions — the copy above on
+   * "No discount", this and the box with a code — and so what lets the
+   * settings save accept either.
+   */
+  withDiscount?: Record<EmailLanguage, Pick<Copy, 'subject' | 'preview'>>;
 }
+
+/**
+ * The discount box, one for every design with a `withDiscount` version, so the
+ * offer reads the same whichever rung it rides on.
+ *
+ * It carries the button, which is why it replaces it rather than sitting above
+ * it: the letter still has exactly one thing to click. The percent and never
+ * the code — see the note on params in buildTemplate.
+ */
+const DISCOUNT_BOX: Record<
+  EmailLanguage,
+  { label: string; subline: string; save: string; note: string }
+> = {
+  ja: {
+    label: '特別オファー',
+    subline: 'あなた専用のmyIQレポートに適用されます',
+    save: ' — {{discount_percent}}%OFF',
+    note: 'クーポンコードの入力は不要です。割引はお支払い画面で自動的に適用されます。'
+  },
+  en: {
+    label: 'Special offer',
+    subline: 'on your personalized myIQ Report',
+    // Appended to the design's own button label. A no-break space keeps
+    // "Save 20%" together when the button wraps on a phone.
+    save: ' — Save {{discount_percent}}%',
+    note: 'No code needed — the discount is applied automatically at checkout.'
+  }
+};
 
 const DEFINITIONS: ReminderDefinition[] = [
   {
     id: 'marketing_reminder_1',
     name: 'Template 1 — Your myIQ results are ready to be unlocked!',
     description:
-      'First nudge, ~24h after the quiz. No discount: the report is ready and one click away.',
+      'First nudge, ~24h after the quiz: the report is ready and one click away. Works with or without a code — with one, the discount box replaces the button.',
     offer: false,
+    withDiscount: {
+      ja: {
+        subject: '【{{discount_percent}}%OFF】myIQの結果をご確認いただける準備が整いました！',
+        preview: 'あなた専用のmyIQレポートを、今なら{{discount_percent}}%OFFでお受け取りいただけます。'
+      },
+      en: {
+        subject: 'Your myIQ results are ready — unlock them for {{discount_percent}}% off!',
+        preview: 'Your personalized myIQ Report is waiting, now {{discount_percent}}% off.'
+      }
+    },
     copy: {
       ja: {
         subject: 'myIQの結果をご確認いただける準備が整いました！',
@@ -89,8 +138,18 @@ const DEFINITIONS: ReminderDefinition[] = [
     id: 'marketing_reminder_2',
     name: 'Template 2 — Ready to discover more about your myIQ results?',
     description:
-      'Second nudge, ~48h after the quiz. No discount: the quiz was only the beginning, the report is the rest.',
+      'Second nudge, ~48h after the quiz: the quiz was only the beginning, the report is the rest. Works with or without a code — with one, the discount box replaces the button.',
     offer: false,
+    withDiscount: {
+      ja: {
+        subject: '【{{discount_percent}}%OFF】myIQの結果を、もっと詳しく知りませんか？',
+        preview: 'あなた専用のmyIQレポートを、今なら{{discount_percent}}%OFFでお受け取りいただけます。'
+      },
+      en: {
+        subject: 'Ready to discover more? Unlock your myIQ Report for {{discount_percent}}% off',
+        preview: 'Your personalized myIQ Report is ready to unlock, now {{discount_percent}}% off.'
+      }
+    },
     copy: {
       ja: {
         subject: 'myIQの結果を、もっと詳しく知りませんか？',
@@ -212,7 +271,7 @@ function emphasise(html: string): string {
 
 /** Turns one definition into a registry entry. */
 function buildTemplate(definition: ReminderDefinition): EmailTemplate {
-  const { id, name, description, offer, copy } = definition;
+  const { id, name, description, offer, copy, withDiscount } = definition;
 
   // Declared, not inferred: the admin panel lists these, and a template hosted
   // in ZeptoMail receives exactly these keys as merge_info.
@@ -222,12 +281,14 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
   // away the thing it is selling. The code is never shown because it does not
   // need to be: cta_url carries it as `price_dis`, and checkout applies it.
   //
-  // `discount_percent` only where the copy prints it — its presence is what
-  // makes the settings save demand a code for the step.
+  // `discount_percent` only where the email can print it. On an offer design
+  // its presence is what makes the settings save demand a code for the step;
+  // on one with a `withDiscount` version, `subjectWithoutDiscount` below tells
+  // the save it may go out on "No discount" as well.
   const params: EmailTemplateParam[] = [
     'first_name',
     'honorific_name',
-    ...(offer ? (['discount_percent'] as const) : []),
+    ...(offer || withDiscount ? (['discount_percent'] as const) : []),
     'cta_url',
     'site_url',
     'email',
@@ -245,9 +306,19 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
     description,
     category: 'marketing',
     params,
-    subject: { ja: copy.ja.subject, en: copy.en.subject },
+    subject: withDiscount
+      ? { ja: withDiscount.ja.subject, en: withDiscount.en.subject }
+      : { ja: copy.ja.subject, en: copy.en.subject },
+    subjectWithoutDiscount: withDiscount ? { ja: copy.ja.subject, en: copy.en.subject } : undefined,
     render(ctx: EmailTemplateContext): string {
       const source = copy[ctx.language] ?? copy.ja;
+
+      // Null unless this send takes the discount version. A code the list
+      // does not know resolves to no percent, and so to the letter as written
+      // rather than a box with the number missing.
+      const percent = withDiscount ? ctx.discount_percent : null;
+      const inbox =
+        withDiscount && percent !== null ? (withDiscount[ctx.language] ?? withDiscount.ja) : source;
 
       // Two interpolation passes, because the copy lands in two kinds of slot.
       // Paragraphs and the closing line carry inline markup and so are
@@ -259,12 +330,24 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
       const asHtml = (text: string) => emphasise(interpolate(text, escaped));
       const asText = (text: string) => interpolate(text, ctx);
 
+      const box = DISCOUNT_BOX[ctx.language] ?? DISCOUNT_BOX.ja;
+      const cta =
+        percent === null
+          ? button(ctx.language, asText(source.cta), ctx.cta_url)
+          : offerCard(ctx.language, {
+              label: box.label,
+              percent,
+              subline: box.subline,
+              cta: { label: asText(source.cta + box.save), url: ctx.cta_url },
+              note: box.note
+            });
+
       // The button sits inside the letter rather than in the layout's action
       // row, so the closing line can follow it as body text.
       const action =
         '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">' +
         '<tr><td align="center" style="padding:14px 0 28px 0;">' +
-        button(ctx.language, asText(source.cta), ctx.cta_url) +
+        cta +
         '</td></tr></table>';
 
       const body =
@@ -275,8 +358,8 @@ function buildTemplate(definition: ReminderDefinition): EmailTemplate {
 
       return renderLayout({
         language: ctx.language,
-        title: asText(source.subject),
-        previewText: asText(source.preview),
+        title: asText(inbox.subject),
+        previewText: asText(inbox.preview),
         body,
         recipientEmail: ctx.email,
         unsubscribeUrl: ctx.unsubscribe_url ?? undefined,
