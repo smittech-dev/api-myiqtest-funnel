@@ -26,9 +26,9 @@ import { buildLevel, scoreAttempt, toClient, CATEGORIES, LEVELS, QUESTIONS_PER_L
 
 const here = dirname(fileURLToPath(import.meta.url));
 const ENGINE_DIR = join(here, '..', 'src', 'boost-engine');
-const FRONTEND_DIR = join(here, '..', '..', 'boost.myiq-test.com', 'src', 'data', 'boost');
+const FRONTEND_DIR = join(here, '..', '..', 'boost.noumirai.com', 'src', 'data', 'boost');
 const CATALOG_COPY = join(here, '..', 'src', 'boost-demo', 'catalog.js');
-const CATALOG_SOURCE = join(here, '..', '..', 'boost.myiq-test.com', 'src', 'data', 'catalog.js');
+const CATALOG_SOURCE = join(here, '..', '..', 'boost.noumirai.com', 'src', 'data', 'catalog.js');
 
 const SEEDS = Number(process.env.SEEDS || 40);
 const problems = [];

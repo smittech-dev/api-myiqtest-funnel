@@ -25,7 +25,7 @@ function warnAboutDeploymentUrls(): void {
   if (isLoopbackUrl(config.appUrl)) {
     logger.error('────────────────────────────────────────────────────────');
     logger.error(`APP_URL is ${config.appUrl} on a production box.`);
-    logger.error('Set it to the public origin of this API, e.g. https://api.myiq-test.com');
+    logger.error('Set it to the public origin of this API, e.g. https://api.noumirai.com');
     logger.error('Until then, marketing email is held: its unsubscribe link');
     logger.error('would point at the machine the customer is reading on.');
     logger.error('────────────────────────────────────────────────────────');

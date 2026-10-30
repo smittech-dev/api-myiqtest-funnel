@@ -31,7 +31,7 @@ import type {
 } from '../types/boost.types.js';
 
 /**
- * Boost My IQ — the daily quiz.
+ * NOUMIRAI Boost — the daily quiz.
  *
  * Every rule the front end displays is enforced here; the client's copy is for
  * showing the right button, not for deciding anything. See `API.md` for the

@@ -120,7 +120,7 @@ export const config = {
     // ZeptoMail prints next to the token in its console.
     token: process.env.ZEPTOMAIL_TOKEN || '',
     fromAddress: process.env.ZEPTOMAIL_FROM_ADDRESS || '',
-    fromName: process.env.ZEPTOMAIL_FROM_NAME || 'myIQ Test',
+    fromName: process.env.ZEPTOMAIL_FROM_NAME || 'NOUMIRAI',
     replyTo: process.env.ZEPTOMAIL_REPLY_TO || '',
     requestTimeoutMs: parseInt(process.env.EMAIL_REQUEST_TIMEOUT_MS || '10000', 10),
     // Renders and logs the message without handing it to the provider. A
@@ -144,15 +144,15 @@ export const config = {
     maxAttempts: parseInt(process.env.TRANSACTIONAL_EMAIL_MAX_ATTEMPTS || '3', 10)
   },
 
-  // The myIQ Cognitive Training Program the subscription grants access to. Its sign-in
+  // The NOUMIRAI Cognitive Training Program the subscription grants access to. Its sign-in
   // page is what the welcome email's credentials are for.
   brainTraining: {
     // Keyed by the recipient's language. One string cannot serve both: the
     // programme name opens the Japanese subject line too, and English words
     // there are not a translation.
     name: {
-      en: process.env.BRAIN_TRAINING_NAME || 'myIQ Cognitive Training Program',
-      ja: process.env.BRAIN_TRAINING_NAME_JA || 'myIQ認知トレーニングプログラム'
+      en: process.env.BRAIN_TRAINING_NAME || 'NOUMIRAI Cognitive Training Program',
+      ja: process.env.BRAIN_TRAINING_NAME_JA || 'ノウミライ認知トレーニングプログラム'
     },
     // Falls back to the funnel origin so the welcome email always has somewhere
     // to point, even before the programme has its own URL.
@@ -207,7 +207,7 @@ export const config = {
   },
 
   /**
-   * Boost My IQ — the members' area of the myIQ Cognitive Training Program.
+   * NOUMIRAI Boost — the members' area of the NOUMIRAI Cognitive Training Program.
    *
    * Its session secret is deliberately separate from the admin one. Sharing a
    * secret between the admin panel and the members' area would make an admin

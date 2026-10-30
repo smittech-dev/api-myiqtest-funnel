@@ -137,7 +137,7 @@ const WELCOME_COPY: Record<EmailLanguage, WelcomeCopy> = {
     headline: 'Welcome to the {{program_name}}.',
     lede: 'Your assessment told you where your reasoning stands today. The training program is the part that moves it — short daily sets, aimed at the domains your own report marked as weakest. Full access starts now.',
     ctaTitle: 'Your first session is waiting',
-    ctaLabel: 'Boost myIQ',
+    ctaLabel: 'Boost NOUMIRAI',
     ctaNote: 'Around ten minutes a day is enough.',
     includedEyebrow: 'What you have access to',
     includedTitle: 'Everything, from day one',
@@ -182,9 +182,9 @@ const WELCOME_COPY: Record<EmailLanguage, WelcomeCopy> = {
 
 const welcomeTemplate: EmailTemplate = {
   id: 'transactional_welcome',
-  name: 'Welcome — myIQ Cognitive Training Program login details',
+  name: 'Welcome — NOUMIRAI Cognitive Training Program login details',
   description:
-    "Sent once, when the first sale settles. Carries the customer's sign-in email and their one-time generated password for the myIQ Cognitive Training Program.",
+    "Sent once, when the first sale settles. Carries the customer's sign-in email and their one-time generated password for the NOUMIRAI Cognitive Training Program.",
   category: 'transactional',
   params: [
     'first_name',
@@ -357,7 +357,7 @@ const REPORT_COPY: Record<EmailLanguage, ReportCopy> = {
     mastheadTag: 'レポート完成',
     eyebrow: '採点完了',
     headline: 'レポートの準備ができました',
-    lede: 'myIQテストの受験、お疲れさまでした。難易度の高い問題も含まれていますので、最後まで解き切られたことは立派です。',
+    lede: 'ノウミライテストの受験、お疲れさまでした。難易度の高い問題も含まれていますので、最後まで解き切られたことは立派です。',
     scoreLabel: 'あなたのIQスコア',
     documentsTitle: '認定証の準備ができました',
     firstSaleCta: '結果を見る',
@@ -365,7 +365,7 @@ const REPORT_COPY: Record<EmailLanguage, ReportCopy> = {
     crossSaleCta: 'パフォーマンスレポートを見る',
     receiptEyebrow: 'ご購入明細',
     invoiceLabel: '請求番号',
-    certificateLabel: 'myIQ認定証',
+    certificateLabel: 'ノウミライ認定証',
     reportLabel: '認知パフォーマンスレポート',
     orderRefLabel: '注文番号',
     completedLabel: '受験日',
@@ -377,7 +377,7 @@ const REPORT_COPY: Record<EmailLanguage, ReportCopy> = {
     mastheadTag: 'Report ready',
     eyebrow: 'Scoring complete',
     headline: 'Your report is ready',
-    lede: 'You have finished the myIQ Test, and you did well. Some of those items are genuinely hard, so getting to the end of them is worth a congratulations.',
+    lede: 'You have finished the NOUMIRAI IQ test, and you did well. Some of those items are genuinely hard, so getting to the end of them is worth a congratulations.',
     scoreLabel: 'Your IQ score',
     documentsTitle: 'Your certificate is ready',
     firstSaleCta: 'Open my result',
@@ -385,7 +385,7 @@ const REPORT_COPY: Record<EmailLanguage, ReportCopy> = {
     crossSaleCta: 'Open my performance report',
     receiptEyebrow: 'Your receipt',
     invoiceLabel: 'Invoice',
-    certificateLabel: 'myIQ Certificate',
+    certificateLabel: 'NOUMIRAI Certificate',
     reportLabel: 'Cognitive Performance Report',
     orderRefLabel: 'Order reference',
     completedLabel: 'Completed',
@@ -454,7 +454,7 @@ const reportReadyTemplate: EmailTemplate = {
       : '';
 
     const receiptRows: RecordField[] = [];
-    if (ctx.quiz_id) receiptRows.push({ label: copy.invoiceLabel, value: 'myIQ_' + ctx.quiz_id });
+    if (ctx.quiz_id) receiptRows.push({ label: copy.invoiceLabel, value: 'NOUMIRAI_' + ctx.quiz_id });
     if (ctx.first_sale_amount) {
       receiptRows.push({ label: copy.certificateLabel, value: ctx.first_sale_amount });
     }
@@ -568,9 +568,9 @@ const RESET_COPY: Record<EmailLanguage, ResetCopy> = {
  */
 const passwordResetTemplate: EmailTemplate = {
   id: 'transactional_password_reset',
-  name: 'Password reset — myIQ Cognitive Training Program',
+  name: 'Password reset — NOUMIRAI Cognitive Training Program',
   description:
-    'Sent when a member asks to reset their myIQ Cognitive Training Program password. Carries a single-use, expiring link — never a password.',
+    'Sent when a member asks to reset their NOUMIRAI Cognitive Training Program password. Carries a single-use, expiring link — never a password.',
   category: 'transactional',
   params: [
     'first_name',

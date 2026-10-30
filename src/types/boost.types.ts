@@ -1,7 +1,7 @@
 /**
- * The Boost My IQ contract, as the members' app expects it.
+ * The NOUMIRAI Boost contract, as the members' app expects it.
  *
- * These shapes are the API, not an internal convenience: `boost.myiq-test.com`
+ * These shapes are the API, not an internal convenience: `boost.noumirai.com`
  * renders them directly and its `API.md` is the specification they implement.
  * Timestamps are epoch milliseconds throughout, because that is what the client
  * does date arithmetic on.

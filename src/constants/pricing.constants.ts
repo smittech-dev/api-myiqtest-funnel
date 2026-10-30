@@ -85,8 +85,8 @@ export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
       price_id: config.subscription.priceIdJa,
       amount: 5495,
       currency: 'JPY',
-      title: 'myIQ認知トレーニングプログラム',
-      stripe_description: 'myIQ Cognitive Training Program',
+      title: 'ノウミライ認知トレーニングプログラム',
+      stripe_description: 'NOUMIRAI Cognitive Training Program',
       interval_days: SUBSCRIPTION_INTERVAL_DAYS,
       trial_days: SUBSCRIPTION_TRIAL_DAYS
     }
@@ -111,8 +111,8 @@ export const FUNNEL_PRICING: Record<'ja' | 'en', LanguagePricingConfig> = {
       price_id: config.subscription.priceIdEn,
       amount: 29.99,
       currency: 'GBP',
-      title: 'myIQ Cognitive Training Program',
-      stripe_description: 'myIQ Cognitive Training Program',
+      title: 'NOUMIRAI Cognitive Training Program',
+      stripe_description: 'NOUMIRAI Cognitive Training Program',
       interval_days: SUBSCRIPTION_INTERVAL_DAYS,
       trial_days: SUBSCRIPTION_TRIAL_DAYS
     }

@@ -58,7 +58,7 @@ export interface EmailTemplateContext {
   login_password: string | null;
   /** Where those credentials are used. */
   login_url: string | null;
-  /** What they are signing in to, e.g. the myIQ Cognitive Training Program. */
+  /** What they are signing in to, e.g. the NOUMIRAI Cognitive Training Program. */
   program_name: string | null;
 
   // --- changing the email address ----------------------------------------
@@ -76,7 +76,7 @@ export interface EmailTemplateContext {
   // Shown so the customer can reconcile the email against their bank
   // statement without contacting us.
 
-  /** Human order number, e.g. `myIQ_8421`. */
+  /** Human order number, e.g. `NOUMIRAI_8421`. */
   order_ref: string | null;
   /** The date the purchase completed, already formatted for the language. */
   order_date: string | null;

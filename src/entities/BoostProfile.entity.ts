@@ -28,7 +28,7 @@ export const DEFAULT_NOTIFICATIONS: NotificationPrefs = {
  *
  * Held apart from `customers` so the funnel's own table needs no migration and
  * no new nullable columns: the funnel owns the account, this owns what the
- * myIQ Cognitive Training Program knows about them. One row per member, created on
+ * NOUMIRAI Cognitive Training Program knows about them. One row per member, created on
  * first sign-in (or by the welcome email) and never by a sign-up form — the
  * platform has no sign-up, by design.
  */

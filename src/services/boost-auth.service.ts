@@ -18,7 +18,7 @@ import type { EmailLanguage } from '../emails/email.types.js';
 import type { UserDto } from '../types/boost.types.js';
 
 /**
- * Sign-in for the myIQ Cognitive Training Program.
+ * Sign-in for the NOUMIRAI Cognitive Training Program.
  *
  * There is no registration here and there never will be: an account exists
  * because the funnel sold a certificate and the welcome email issued a

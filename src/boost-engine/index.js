@@ -1,5 +1,5 @@
 /**
- * Boost My IQ — the single daily-quiz system.
+ * NOUMIRAI Boost — the single daily-quiz system.
  *
  * Six categories × five levels × twenty questions. Questions are generated
  * from a seed, so a given attempt always rebuilds identically (the server only

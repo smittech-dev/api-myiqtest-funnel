@@ -1,6 +1,6 @@
 # boost-demo — the catalogue, copied from the frontend
 
-`catalog.js` is a **verbatim copy** of `boost.myiq-test.com/src/data/catalog.js`:
+`catalog.js` is a **verbatim copy** of `boost.noumirai.com/src/data/catalog.js`:
 the twenty-five brain games, their categories, score modes and star thresholds.
 `npm run check:boost` fails the build if the two ever drift.
 

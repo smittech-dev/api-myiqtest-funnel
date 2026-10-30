@@ -107,8 +107,8 @@ const MONO = "ui-monospace,'SFMono-Regular','Courier New',monospace";
 
 /** The masthead logo, per language. */
 const LOGO: Record<EmailLanguage, { src: string; width: number; height: number; alt: string }> = {
-  en: { src: 'https://myiq-test.com/logo-en-navy.png', width: 180, height: 33, alt: 'myIQ Test' },
-  ja: { src: 'https://myiq-test.com/logo-jp-navy.png', width: 180, height: 35, alt: 'myIQ Test' }
+  en: { src: 'https://noumirai.com/logo-en-navy.png', width: 178, height: 38, alt: 'NOUMIRAI' },
+  ja: { src: 'https://noumirai.com/logo-jp-navy.png', width: 144, height: 38, alt: 'ノウミライ' }
 };
 
 /* ── escaping ─────────────────────────────────────────────────────────────── */
@@ -798,7 +798,7 @@ const FOOTER_COPY: Record<
   }
 > = {
   en: {
-    receiving: 'You are receiving this because you took the myIQ Test with the email address',
+    receiving: 'You are receiving this because you took the NOUMIRAI IQ test with the email address',
     questions: 'Questions? Write to',
     support: 'and a person will reply.',
     privacy: 'Privacy',
@@ -811,7 +811,7 @@ const FOOTER_COPY: Record<
     unsubTail: 'You will still receive receipts and account emails.'
   },
   ja: {
-    receiving: 'このメールは、次のメールアドレスでmyIQテストを受験された方にお送りしています：',
+    receiving: 'このメールは、次のメールアドレスでノウミライテストを受験された方にお送りしています：',
     questions: 'ご不明な点がございましたら、',
     support: 'までご連絡ください。担当者よりご返信いたします。',
     privacy: 'プライバシーポリシー',
@@ -822,7 +822,7 @@ const FOOTER_COPY: Record<
   }
 };
 
-const SUPPORT_EMAIL = 'support@myiq-test.com';
+const SUPPORT_EMAIL = 'support@noumirai.com';
 
 /** The invisible line clients show beside the subject, plus a spacer. */
 function previewBlock(text: string): string {
@@ -851,7 +851,7 @@ function renderActions(language: EmailLanguage, actions: EmailAction[]): string 
 function renderFooter(language: EmailLanguage, opts: LayoutOptions): string {
   const copy = FOOTER_COPY[language];
   const body = BODY[language];
-  const legalBase = 'https://myiq-test.com/' + language + '/legal/';
+  const legalBase = 'https://noumirai.com/' + language + '/legal/';
 
   const receiving = opts.footerNote
     ? escapeHtml(opts.footerNote)

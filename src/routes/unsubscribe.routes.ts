@@ -66,7 +66,7 @@ const COPY: Record<EmailLanguage, Copy> = {
       done: 'No more marketing email will be sent to this address.',
       resubscribed: 'Offers and reminders will start arriving at this address again.',
       invalid:
-        'The link may have been cut in half by your email client, or it may not be ours. Write to support@myiq-test.com and a person will take you off the list.'
+        'The link may have been cut in half by your email client, or it may not be ours. Write to support@noumirai.com and a person will take you off the list.'
     },
     confirmButton: 'Unsubscribe me',
     resubscribeButton: 'Actually, keep me subscribed',
@@ -75,7 +75,7 @@ const COPY: Record<EmailLanguage, Copy> = {
     // before it happens, it is a fact; said afterwards it sounds like an excuse.
     keepReceiving:
       'You will still receive receipts, password resets and other emails about your account. Those are not marketing, and we cannot turn them off while you hold an account.',
-    backToSite: 'Return to myiq-test.com',
+    backToSite: 'Return to noumirai.com',
     brandTag: 'Email preferences'
   },
   ja: {
@@ -91,13 +91,13 @@ const COPY: Record<EmailLanguage, Copy> = {
       done: 'このメールアドレス宛のマーケティングメールは今後送信されません。',
       resubscribed: 'このメールアドレス宛にキャンペーンやリマインダーを再びお送りします。',
       invalid:
-        'メールソフトによってリンクが途中で切れている可能性があります。support@myiq-test.com までご連絡いただければ、担当者が配信停止の手続きをいたします。'
+        'メールソフトによってリンクが途中で切れている可能性があります。support@noumirai.com までご連絡いただければ、担当者が配信停止の手続きをいたします。'
     },
     confirmButton: '配信を停止する',
     resubscribeButton: 'やはり配信を続ける',
     keepReceiving:
       '領収書、パスワードの再設定、アカウントに関するお知らせは引き続きお送りします。これらはマーケティングメールではないため、アカウントをお持ちの間は停止できません。',
-    backToSite: 'myiq-test.com へ戻る',
+    backToSite: 'noumirai.com へ戻る',
     brandTag: 'メール配信設定'
   }
 };
@@ -160,7 +160,7 @@ function renderPage(opts: {
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="noindex, nofollow" />
-<title>${escapeHtml(copy.title[state])} · myIQ Test</title>
+<title>${escapeHtml(copy.title[state])} · NOUMIRAI</title>
 <style>
   :root { color-scheme: light dark; }
   body { margin:0; padding:24px 16px; background:${PALETTE.canvas}; font-family:${stack};
@@ -193,7 +193,7 @@ function renderPage(opts: {
     ${addressLine}
     ${actions}
     ${note}
-    <p style="margin:20px 0 0; font-size:13px;"><a href="https://myiq-test.com/${language}">${escapeHtml(copy.backToSite)}</a></p>
+    <p style="margin:20px 0 0; font-size:13px;"><a href="https://noumirai.com/${language}">${escapeHtml(copy.backToSite)}</a></p>
   </main>
 </body>
 </html>`;

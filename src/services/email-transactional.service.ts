@@ -52,7 +52,7 @@ export class EmailTransactionalService {
   // -------------------------------------------------------------------------
 
   /**
-   * Send the welcome email with the customer's myIQ Cognitive Training Program credentials.
+   * Send the welcome email with the customer's NOUMIRAI Cognitive Training Program credentials.
    *
    * Issues a real password the first time, hashes it with bcrypt into
    * `customers.password_hash`, and stamps `password_set_at`. The plaintext lives
@@ -352,7 +352,7 @@ export class EmailTransactionalService {
     customer.password_set_at = new Date();
     await this.customerRepository.save(customer);
 
-    logger.info(`Issued myIQ Cognitive Training Program credentials for customer ${customer.id}.`);
+    logger.info(`Issued NOUMIRAI Cognitive Training Program credentials for customer ${customer.id}.`);
     return password;
   }
 
@@ -454,7 +454,7 @@ export class EmailTransactionalService {
 /* ── formatting helpers ───────────────────────────────────────────────────── */
 
 /** A human order number. Stable, and derived rather than stored. */
-const orderRef = (quizResult: CustomerQuizResult): string => `myIQ_${quizResult.id}`;
+const orderRef = (quizResult: CustomerQuizResult): string => `NOUMIRAI_${quizResult.id}`;
 
 /** A date the customer can match against a statement, in their own language. */
 function formatDate(language: EmailLanguage, date: Date): string {

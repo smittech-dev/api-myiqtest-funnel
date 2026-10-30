@@ -1,6 +1,6 @@
 # boost-engine — copied from the frontend, not written here
 
-These files are a **verbatim copy** of `boost.myiq-test.com/src/data/boost/`,
+These files are a **verbatim copy** of `boost.noumirai.com/src/data/boost/`,
 with one mechanical change: relative imports are extension-qualified
 (`'./util'` → `'./util.js'`) because this package is `"type": "module"` on
 Node's `NodeNext` resolution, which does not guess extensions. Nothing else
@@ -29,7 +29,7 @@ both sides.
 Edit the frontend copy first, then re-copy here and re-run the check:
 
 ```bash
-cp ../boost.myiq-test.com/src/data/boost/*.js src/boost-engine/
+cp ../boost.noumirai.com/src/data/boost/*.js src/boost-engine/
 #   then re-add the .js import extensions, or the check will tell you to
 npm run check:boost
 ```

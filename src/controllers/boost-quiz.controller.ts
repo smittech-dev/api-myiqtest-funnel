@@ -33,7 +33,7 @@ const slugOf = (req: Request): string =>
   Array.isArray(req.params.slug) ? req.params.slug[0] : req.params.slug;
 
 /**
- * Boost My IQ.
+ * NOUMIRAI Boost.
  *
  * Every handler resolves the member's timezone first, because every rule this
  * module enforces — the daily limit, expiry at midnight, the streak — is stated

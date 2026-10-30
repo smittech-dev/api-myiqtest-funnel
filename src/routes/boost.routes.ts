@@ -16,7 +16,7 @@ import {
 } from '../middlewares/boost-rate-limit.middleware.js';
 
 /**
- * The members' area — Boost My IQ.
+ * The members' area — NOUMIRAI Boost.
  *
  * Mounted at /boost-api/v1, which is what `VITE_API_BASE_URL` points at. It is
  * exempt from the funnel's `x-api-key` guard for the same reason /admin is:

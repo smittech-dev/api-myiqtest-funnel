@@ -70,7 +70,7 @@ export function formatMoney(amount: string | number, currency: string): string {
 }
 
 /** What the programme is called to customers, in one place. */
-const PROGRAM_NAME = 'myIQ Cognitive Training Program';
+const PROGRAM_NAME = 'NOUMIRAI Cognitive Training Program';
 
 /**
  * Stored plan name -> what the member is shown.
@@ -84,7 +84,15 @@ const PROGRAM_NAME = 'myIQ Cognitive Training Program';
 const PLAN_LABELS: Record<string, string> = {
   premium: 'Premium',
   subscription: 'Premium',
-  // Current, in both languages the funnel sells in.
+  // Current, in both languages the funnel sells in. The Japanese name has had
+  // two spellings since the rename — Latin first, then katakana once the logo
+  // settled on it — and a row could carry either.
+  'noumirai cognitive training program': PROGRAM_NAME,
+  'ノウミライ認知トレーニングプログラム': PROGRAM_NAME,
+  'noumirai認知トレーニングプログラム': PROGRAM_NAME,
+  // Sold under the myIQ Test name, before the rename to NOUMIRAI. Kept for
+  // exactly the reason everything below it is kept: the row in the database
+  // still says what it said on the day of the sale.
   'myiq cognitive training program': PROGRAM_NAME,
   'myiq認知トレーニングプログラム': PROGRAM_NAME,
   // Legacy. `IQ Training Monthly` is the oldest and the one that matters most

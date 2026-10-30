@@ -586,7 +586,7 @@ the provider payload — they name a template and hand over a context.
 | `ZEPTOMAIL_API_URL` | `https://api.zeptomail.com/v1.1/email` | `.com` global datacenter, `.eu` for Europe |
 | `ZEPTOMAIL_TOKEN` | — | The send-mail token, including its `Zoho-enczapikey ` prefix |
 | `ZEPTOMAIL_FROM_ADDRESS` | — | Sender, on a domain verified in your ZeptoMail account |
-| `ZEPTOMAIL_FROM_NAME` | `MyIQTest` | Sender display name |
+| `ZEPTOMAIL_FROM_NAME` | `NOUMIRAI` | Sender display name |
 | `ZEPTOMAIL_REPLY_TO` | — | Optional reply-to address |
 | `ZEPTOMAIL_TRACK_OPENS` / `_CLICKS` | `true` | Provider-side tracking |
 | `EMAIL_REQUEST_TIMEOUT_MS` | `10000` | Abort the provider request after this long |
@@ -614,7 +614,7 @@ What is in it today:
 | Template id | Category | Sent when |
 |---|---|---|
 | `marketing_reminder_1` … `marketing_reminder_4` | marketing | The abandoned-checkout ladder (see below) |
-| `transactional_welcome` | transactional | The first sale settles — carries the myIQ Cognitive Training Program credentials |
+| `transactional_welcome` | transactional | The first sale settles — carries the NOUMIRAI Cognitive Training Program credentials |
 | `transactional_report_ready` | transactional | The customer finishes the funnel — links their reports |
 
 `category` is what separates them in the admin panel: the step picker offers only marketing
@@ -670,7 +670,7 @@ relies on their inbox would ever find out.
 ```bash
 # one address, or several comma separated — each gets its own send, so one dead
 # address does not cost the others their copy
-CONTACT_ADMIN_EMAIL=support@myiq-test.com,ops@myiq-test.com
+CONTACT_ADMIN_EMAIL=support@noumirai.com,ops@noumirai.com
 ```
 
 Leaving it empty notifies nobody. The inquiry is still stored and still appears in the
@@ -810,8 +810,8 @@ delivery of something bought — so they are triggered by the funnel itself rath
 |---|---|---|
 | `TRANSACTIONAL_EMAIL_ENABLED` | `false` | Master switch for both messages |
 | `TRANSACTIONAL_EMAIL_MAX_ATTEMPTS` | `3` | Provider calls per message before it is given up on |
-| `BRAIN_TRAINING_NAME` | `myIQ Cognitive Training Program` | What the emails call the programme, for EN recipients |
-| `BRAIN_TRAINING_NAME_JA` | `myIQ認知トレーニングプログラム` | The same name for JA recipients |
+| `BRAIN_TRAINING_NAME` | `NOUMIRAI Cognitive Training Program` | What the emails call the programme, for EN recipients |
+| `BRAIN_TRAINING_NAME_JA` | `ノウミライ認知トレーニングプログラム` | The same name for JA recipients |
 | `BRAIN_TRAINING_LOGIN_URL` | — | Where the credentials are used; falls back to `FRONTEND_URL` |
 
 #### 1. Welcome — when the first sale settles
@@ -821,7 +821,7 @@ both the confirm endpoint and the Stripe webhook settle through — so the email
 matter which of them arrives first. Gated on `transaction_type === 'first_sale'`: that method
 also settles cross-sale and subscription intents, and those are not a new account.
 
-It carries the customer's sign-in details for the myIQ Cognitive Training Program the subscription
+It carries the customer's sign-in details for the NOUMIRAI Cognitive Training Program the subscription
 unlocks:
 
 - A password is **generated**, not chosen — the funnel asks for a card, never a password, so the

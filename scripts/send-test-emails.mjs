@@ -172,8 +172,8 @@ const ladder = await loadLadder();
 
 // Real-looking destinations rather than the localhost in .env: whether a link
 // looks right is part of what is being reviewed.
-const SITE = process.env.TEST_SITE_URL || 'https://myiq-test.com';
-const APP = process.env.TEST_APP_URL || 'https://boost.myiq-test.com';
+const SITE = process.env.TEST_SITE_URL || 'https://noumirai.com';
+const APP = process.env.TEST_APP_URL || 'https://boost.noumirai.com';
 
 /** Everything any design might read, in the language it is being sent in. */
 function baseContext(language, recipient) {
@@ -198,7 +198,7 @@ function baseContext(language, recipient) {
       login_email: recipient,
       login_password: 'K7MP-3QRT-9XYZ',
       login_url: `${APP}/login`,
-      program_name: ja ? 'myIQ認知トレーニングプログラム' : 'myIQ Cognitive Training Program',
+      program_name: ja ? 'NOUMIRAI認知トレーニングプログラム' : 'NOUMIRAI Cognitive Training Program',
 
       reset_url: `${APP}/reset-password?token=review-fixture`,
       reset_expires_hours: 1,
@@ -208,7 +208,7 @@ function baseContext(language, recipient) {
       confirm_url: `${APP}/confirm-email?token=review-fixture`,
       confirm_expires_hours: 1,
 
-      order_ref: 'myIQ_8421',
+      order_ref: 'NOUMIRAI_8421',
       order_date: ja ? '2026年9月20日' : '20 September 2026',
       quiz_id: '8421',
       first_sale_amount: ja ? '￥199' : '£2.99',

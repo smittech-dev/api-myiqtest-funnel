@@ -1,5 +1,5 @@
 /**
- * Boost My IQ metadata — safe to import from UI code.
+ * NOUMIRAI Boost metadata — safe to import from UI code.
  * Nothing here can be used to work out an answer; the generators and the
  * scoring live in index.js, which only the backend (or the mock) may load.
  */

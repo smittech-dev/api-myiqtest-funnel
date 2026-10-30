@@ -714,7 +714,7 @@ export class PaymentService {
         customer_quiz_result_id: quizResultId,
         stripe_subscription_id: subscription.id,
         stripe_customer_id: stripeCustomerId,
-        plan_name: item?.price?.nickname || 'myIQ Cognitive Training Program',
+        plan_name: item?.price?.nickname || 'NOUMIRAI Cognitive Training Program',
         amount: amount.toString(),
         currency: (item?.price?.currency || 'jpy').toUpperCase()
       });
@@ -874,7 +874,7 @@ export class PaymentService {
       ? await this.startSubscription(quizResult, paymentIntent)
       : subscriptionSkipped('transaction has no quiz result');
 
-    // The welcome email, with the customer's myIQ Cognitive Training Program credentials.
+    // The welcome email, with the customer's NOUMIRAI Cognitive Training Program credentials.
     //
     // Deliberately not awaited. The customer's money has already moved, and a
     // slow or unhappy email provider must not delay a confirm response or push

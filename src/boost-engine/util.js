@@ -1,4 +1,4 @@
-/** Deterministic helpers shared by the Boost My IQ question generators. */
+/** Deterministic helpers shared by the NOUMIRAI Boost question generators. */
 
 export function hash(str) {
   let h = 2166136261;

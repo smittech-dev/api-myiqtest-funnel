@@ -27,8 +27,8 @@ const { createEmailContext, honorific } = await import('../src/emails/context.ts
 const problems = [];
 const fail = (msg) => problems.push(msg);
 
-const SITE = 'https://myiq-test.com';
-const APP = 'https://boost.myiq-test.com';
+const SITE = 'https://noumirai.com';
+const APP = 'https://boost.noumirai.com';
 const PASSWORD = 'K7MP-3QRT-9XYZ';
 
 function contextFor(language, overrides = {}) {
@@ -48,7 +48,7 @@ function contextFor(language, overrides = {}) {
       login_email: 'customer@example.com',
       login_password: PASSWORD,
       login_url: APP + '/login',
-      program_name: 'myIQ Cognitive Training Program',
+      program_name: 'NOUMIRAI Cognitive Training Program',
       reset_url: APP + '/reset-password?token=t',
       reset_expires_hours: 1,
       new_email: 'new.address@example.com',
@@ -57,7 +57,7 @@ function contextFor(language, overrides = {}) {
       confirm_expires_hours: 1,
       first_sale_report_url: SITE + '/result',
       cross_sale_report_url: SITE + '/result/report',
-      order_ref: 'myIQ_8421',
+      order_ref: 'NOUMIRAI_8421',
       order_date: '20 September 2026',
       quiz_id: '8421',
       first_sale_amount: '£2.99',
@@ -135,7 +135,7 @@ for (const template of listTemplates()) {
       'a 600px card': 'width:600px; max-width:600px',
       'preview text': 'mso-hide:all',
       'the mobile gutter rule': '.px { padding-left:22px',
-      'a footer support address': 'support@myiq-test.com',
+      'a footer support address': 'support@noumirai.com',
       'footer legal links': '/legal/privacy'
     };
     for (const [what, needle] of Object.entries(shell)) {
@@ -224,7 +224,7 @@ for (const language of LANGUAGES) {
   }
   // Only the footer's support and legal links should remain.
   const noticeLinks = (notice.match(/href="([^"]+)"/g) ?? []).filter(
-    (h) => !h.includes('mailto:') && !h.includes('/legal/') && !h.includes('myiq-test.com"')
+    (h) => !h.includes('mailto:') && !h.includes('/legal/') && !h.includes('noumirai.com"')
   );
   if (noticeLinks.length) fail(`email change notice ${where}: unexpected links ${noticeLinks.join(', ')}`);
 

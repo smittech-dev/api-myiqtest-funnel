@@ -23,8 +23,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 const OUT = join(here, '..', 'temp', 'email-preview');
 mkdirSync(OUT, { recursive: true });
 
-const SITE = 'https://myiq-test.com';
-const APP = 'https://boost.myiq-test.com';
+const SITE = 'https://noumirai.com';
+const APP = 'https://boost.noumirai.com';
 
 /** Representative values for every parameter any design reads. */
 function contextFor(language, overrides = {}) {
@@ -46,7 +46,7 @@ function contextFor(language, overrides = {}) {
       login_password: 'K7MP-3QRT-9XYZ',
       login_url: APP + '/login',
       program_name:
-        language === 'ja' ? 'myIQ認知トレーニングプログラム' : 'myIQ Cognitive Training Program',
+        language === 'ja' ? 'NOUMIRAI認知トレーニングプログラム' : 'NOUMIRAI Cognitive Training Program',
       reset_url: APP + '/reset-password?token=preview',
       reset_expires_hours: 1,
       new_email: 'new.address@example.com',
@@ -55,7 +55,7 @@ function contextFor(language, overrides = {}) {
       confirm_expires_hours: 1,
       first_sale_report_url: SITE + '/' + language + '/result?quiz_id=preview',
       cross_sale_report_url: SITE + '/' + language + '/result/report?quiz_id=preview',
-      order_ref: 'myIQ_8421',
+      order_ref: 'NOUMIRAI_8421',
       order_date: language === 'ja' ? '2026年9月20日' : '20 September 2026',
       quiz_id: '8421',
       first_sale_amount: language === 'ja' ? '￥199' : '£2.99',

@@ -1,5 +1,5 @@
 /**
- * Brain-game catalogue — five games in each Boost My IQ skill category.
+ * Brain-game catalogue — five games in each NOUMIRAI Boost skill category.
  *
  * scoreMode
  *   points — score accumulates; combos multiply it
