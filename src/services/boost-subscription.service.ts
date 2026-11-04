@@ -154,7 +154,7 @@ export async function toSubscriptionDto(
   const certificate =
     quizResult && quizResult.iq_score !== null
       ? {
-          id: profile?.member_id ?? `MIQ-${quizResult.id}`,
+          id: profile?.member_id ?? `NIQ-${quizResult.id}`,
           iq: quizResult.iq_score,
           issuedAt: quizResult.created_at.getTime()
         }

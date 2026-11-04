@@ -22,7 +22,7 @@ import type { UserDto } from '../types/boost.types.js';
  * — so support can map a member id back to a customer without a lookup table,
  * and a lost row can be rebuilt with the same number the member has seen.
  */
-const memberIdFor = (customerId: string): string => `MIQ-${customerId.padStart(7, '0')}`;
+const memberIdFor = (customerId: string): string => `NIQ-${customerId.padStart(7, '0')}`;
 
 /**
  * Birth year from the funnel's `age`, which is a free-text column.

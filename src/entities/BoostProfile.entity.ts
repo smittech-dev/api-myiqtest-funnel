@@ -42,7 +42,7 @@ export class BoostProfile {
   @JoinColumn({ name: 'customer_id' })
   customer!: Customer;
 
-  /** The certificate number the member bought, e.g. 'MIQ-4821907'. */
+  /** The certificate number the member bought, e.g. 'NIQ-4821907'. */
   @Column({ type: 'varchar', length: 32, unique: true })
   member_id!: string;
 
