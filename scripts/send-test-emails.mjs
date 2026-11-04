@@ -208,7 +208,7 @@ function baseContext(language, recipient) {
       confirm_url: `${APP}/confirm-email?token=review-fixture`,
       confirm_expires_hours: 1,
 
-      order_ref: 'NOUMIRAI_8421',
+      order_ref: 'noumiraiIQ_8421',
       order_date: ja ? '2026年9月20日' : '20 September 2026',
       quiz_id: '8421',
       first_sale_amount: ja ? '￥199' : '£2.99',

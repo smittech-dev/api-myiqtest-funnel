@@ -454,7 +454,7 @@ export class EmailTransactionalService {
 /* ── formatting helpers ───────────────────────────────────────────────────── */
 
 /** A human order number. Stable, and derived rather than stored. */
-const orderRef = (quizResult: CustomerQuizResult): string => `NOUMIRAI_${quizResult.id}`;
+const orderRef = (quizResult: CustomerQuizResult): string => `noumiraiIQ_${quizResult.id}`;
 
 /** A date the customer can match against a statement, in their own language. */
 function formatDate(language: EmailLanguage, date: Date): string {

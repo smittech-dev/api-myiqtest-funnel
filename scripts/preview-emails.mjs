@@ -55,7 +55,7 @@ function contextFor(language, overrides = {}) {
       confirm_expires_hours: 1,
       first_sale_report_url: SITE + '/' + language + '/result?quiz_id=preview',
       cross_sale_report_url: SITE + '/' + language + '/result/report?quiz_id=preview',
-      order_ref: 'NOUMIRAI_8421',
+      order_ref: 'noumiraiIQ_8421',
       order_date: language === 'ja' ? '2026年9月20日' : '20 September 2026',
       quiz_id: '8421',
       first_sale_amount: language === 'ja' ? '￥199' : '£2.99',

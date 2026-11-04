@@ -454,7 +454,7 @@ const reportReadyTemplate: EmailTemplate = {
       : '';
 
     const receiptRows: RecordField[] = [];
-    if (ctx.quiz_id) receiptRows.push({ label: copy.invoiceLabel, value: 'NOUMIRAI_' + ctx.quiz_id });
+    if (ctx.quiz_id) receiptRows.push({ label: copy.invoiceLabel, value: 'noumiraiIQ_' + ctx.quiz_id });
     if (ctx.first_sale_amount) {
       receiptRows.push({ label: copy.certificateLabel, value: ctx.first_sale_amount });
     }
