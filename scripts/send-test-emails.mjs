@@ -211,9 +211,9 @@ function baseContext(language, recipient) {
       order_ref: 'noumiraiIQ_8421',
       order_date: ja ? '2026年9月20日' : '20 September 2026',
       quiz_id: '8421',
-      first_sale_amount: ja ? '￥199' : '£2.99',
-      cross_sale_amount: ja ? '￥1,990' : '£7.99',
-      subscription_price: ja ? '￥5,495' : '£29.99',
+      first_sale_amount: ja ? '199 円' : '£2.99',
+      cross_sale_amount: ja ? '1,990 円' : '£7.99',
+      subscription_price: ja ? '5,495 円' : '£29.99',
       interval_days: 28,
       // Null, not a date: nothing currently creates a trial, and an email must
       // never announce one the customer does not have. `--variants` sends the

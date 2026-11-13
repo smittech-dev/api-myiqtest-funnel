@@ -86,7 +86,7 @@ export interface EmailTemplateContext {
   first_sale_amount: string | null;
   /** The career report, when that upsell was bought. Null when it was not. */
   cross_sale_amount: string | null;
-  /** The recurring charge, e.g. `¥5,495` — in the currency of their funnel. */
+  /** The recurring charge, e.g. `5,495円` — in the currency of their funnel. */
   subscription_price: string | null;
   /**
    * Days between charges, e.g. 28.

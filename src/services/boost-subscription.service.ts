@@ -52,15 +52,26 @@ export async function findSubscription(customerId: string): Promise<CustomerSubs
 /**
  * Money as a member should read it.
  *
- * JPY is zero-decimal — `¥980`, never `¥980.00`. Everything else gets two
+ * JPY is zero-decimal — `980 円`, never `980.00 円`. Everything else gets two
  * places. `Intl` knows this per currency, so the rule is not hardcoded here.
+ *
+ * Yen takes the counter after the figure rather than `Intl`'s leading `￥`,
+ * which is how the currency is written in English and not how it is written
+ * in Japanese. One function, so the member's receipts, the subscription price
+ * on their account and every amount in the transactional email all agree.
  */
 export function formatMoney(amount: string | number, currency: string): string {
   const value = typeof amount === 'string' ? Number(amount) : amount;
   if (!Number.isFinite(value)) return '';
 
+  if (currency === 'JPY') {
+    // A non-breaking space, so a wrap can never leave the counter stranded on
+    // the line below the figure it belongs to.
+    return `${new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 0 }).format(value)} 円`;
+  }
+
   try {
-    return new Intl.NumberFormat(currency === 'JPY' ? 'ja-JP' : 'en-GB', {
+    return new Intl.NumberFormat('en-GB', {
       style: 'currency',
       currency
     }).format(value);

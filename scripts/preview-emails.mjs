@@ -58,9 +58,9 @@ function contextFor(language, overrides = {}) {
       order_ref: 'noumiraiIQ_8421',
       order_date: language === 'ja' ? '2026年9月20日' : '20 September 2026',
       quiz_id: '8421',
-      first_sale_amount: language === 'ja' ? '￥199' : '£2.99',
-      cross_sale_amount: language === 'ja' ? '￥1,990' : '£7.99',
-      subscription_price: language === 'ja' ? '￥5,495' : '£29.99',
+      first_sale_amount: language === 'ja' ? '199 円' : '£2.99',
+      cross_sale_amount: language === 'ja' ? '1,990 円' : '£7.99',
+      subscription_price: language === 'ja' ? '5,495 円' : '£29.99',
       interval_days: 28,
       trial_end: null,
       ...overrides

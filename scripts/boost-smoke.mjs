@@ -177,7 +177,7 @@ check('subscription shows the saved card', r.body.subscription?.paymentMethod?.l
 // make this fail every time the price list changes.
 const label = r.body.subscription?.priceLabel ?? '';
 check('price rendered as real money, not [PRICE]',
-  /[¥￥£$]/.test(label) && /\d/.test(label) && !label.includes('PRICE'), label);
+  /[£$]|円$/.test(label) && /\d/.test(label) && !label.includes('PRICE'), label);
 check('certificate carried from the quiz result', r.body.subscription?.certificate?.iq === 118);
 check('GET /me leaks no password hash', !/password_hash/.test(JSON.stringify(r.body)));
 

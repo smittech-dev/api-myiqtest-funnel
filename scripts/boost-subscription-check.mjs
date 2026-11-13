@@ -145,7 +145,7 @@ check('a trialing member can TRAIN (trialing grants access)', r.status !== 403, 
 out.push('--- Multi-currency');
 
 check('JPY renders zero-decimal', sub.priceLabel.includes('5,495') && !sub.priceLabel.includes('.00'), sub.priceLabel);
-check('JPY uses the yen sign', /[¥￥]/.test(sub.priceLabel), sub.priceLabel);
+check('JPY is counted in 円 after the figure', /^[0-9,]+ 円$/.test(sub.priceLabel), sub.priceLabel);
 
 // The same row in the English funnel's currency must format differently.
 await db.query("UPDATE customer_subscriptions SET currency='GBP', amount=29.99 WHERE customer_id=$1", [CID]);
