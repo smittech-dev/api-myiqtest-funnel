@@ -677,7 +677,17 @@ const adminEmailMarketingPaths = {
                               configured: { type: 'boolean' },
                               problem: { type: 'string', nullable: true },
                               from_address: { type: 'string' },
-                              from_name: { type: 'string' },
+                              from_name: {
+                                type: 'string',
+                                description: 'Sender name shown to English readers.',
+                                example: 'NOUMIRAI IQ Test'
+                              },
+                              from_name_ja: {
+                                type: 'string',
+                                description:
+                                  'Sender name shown to Japanese readers; falls back to from_name when ZEPTOMAIL_FROM_NAME_JA is unset.',
+                                example: 'ノウミライIQテスト'
+                              },
                               dry_run: { type: 'boolean' },
                               cron_enabled: { type: 'boolean' },
                               cron_expression: { type: 'string', example: '*/5 * * * *' },

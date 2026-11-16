@@ -1,5 +1,5 @@
 import { config } from '../config/env.config.js';
-import type { EmailTemplateContext } from '../emails/email.types.js';
+import type { EmailLanguage, EmailTemplateContext } from '../emails/email.types.js';
 import {
   getTemplate,
   mergeInfoFor,
@@ -24,6 +24,18 @@ import { logger } from '../utils/logger.util.js';
  * a 500 on one address, and the caller needs the reason to write into the send
  * log either way — so every failure comes back as `{ status: 'failed', error }`.
  */
+
+/**
+ * The sender name to show a reader of this language.
+ *
+ * Exported because the admin transport panel reports both, and because the
+ * fallback belongs in one place rather than at each call site. Anything other
+ * than `ja` — including an absent value, which the types forbid but a context
+ * assembled by hand could still produce — gets the English name.
+ */
+export function fromNameFor(language: EmailLanguage | undefined): string {
+  return language === 'ja' ? config.email.fromName.ja : config.email.fromName.en;
+}
 
 /** ZeptoMail's response envelope, the parts we read. */
 interface ZeptoMailResponse {
@@ -196,8 +208,15 @@ export class EmailService {
       }
     };
 
+    /* The sender name in the recipient's own language. Every context carries
+       `language`, and the templates have always used it for the subject and
+       body — the sender name was the one line still fixed to a single
+       language. `fromNameFor` is tolerant of a context that somehow arrives
+       without one, since a send must not fail over a display name. */
+    const fromName = fromNameFor(context.language);
+
     const common = {
-      from: { address: config.email.fromAddress, name: config.email.fromName },
+      from: { address: config.email.fromAddress, name: fromName },
       to: [recipient],
       track_opens: config.email.trackOpens,
       track_clicks: config.email.trackClicks,
@@ -205,7 +224,7 @@ export class EmailService {
       // alone, without correlating on timestamps.
       client_reference: templateId,
       ...(config.email.replyTo
-        ? { reply_to: [{ address: config.email.replyTo, name: config.email.fromName }] }
+        ? { reply_to: [{ address: config.email.replyTo, name: fromName }] }
         : {})
     };
 

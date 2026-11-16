@@ -120,7 +120,24 @@ export const config = {
     // ZeptoMail prints next to the token in its console.
     token: process.env.ZEPTOMAIL_TOKEN || '',
     fromAddress: process.env.ZEPTOMAIL_FROM_ADDRESS || '',
-    fromName: process.env.ZEPTOMAIL_FROM_NAME || 'NOUMIRAI',
+    /**
+     * The sender name, keyed by the recipient's language — the same reasoning
+     * as `brainTraining.name` below.
+     *
+     * This is the first thing a reader sees, ahead of the subject and well
+     * ahead of the body, and it is the line an inbox uses to decide whether a
+     * message is from someone it recognises. A Japanese reader was being shown
+     * a Latin sender name above an otherwise Japanese email.
+     *
+     * `ja` falls back to the English value, not to the built-in below, when
+     * `ZEPTOMAIL_FROM_NAME_JA` is unset: a deployment that has set its own
+     * English sender name but not yet a Japanese one should keep sending under
+     * its own name rather than quietly reverting to a default.
+     */
+    fromName: {
+      en: process.env.ZEPTOMAIL_FROM_NAME || 'NOUMIRAI',
+      ja: process.env.ZEPTOMAIL_FROM_NAME_JA || process.env.ZEPTOMAIL_FROM_NAME || 'ノウミライ'
+    },
     replyTo: process.env.ZEPTOMAIL_REPLY_TO || '',
     requestTimeoutMs: parseInt(process.env.EMAIL_REQUEST_TIMEOUT_MS || '10000', 10),
     // Renders and logs the message without handing it to the provider. A

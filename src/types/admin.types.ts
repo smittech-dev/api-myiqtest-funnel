@@ -152,7 +152,14 @@ export interface AdminEmailTransportStatus {
   /** What is missing, when it is not configured. */
   problem: string | null;
   from_address: string;
+  /** The sender name English readers see (ZEPTOMAIL_FROM_NAME). */
   from_name: string;
+  /**
+   * The sender name Japanese readers see (ZEPTOMAIL_FROM_NAME_JA, falling back
+   * to the English one). Added beside `from_name` rather than replacing it, so
+   * an admin screen that only knows the original field keeps working.
+   */
+  from_name_ja: string;
   dry_run: boolean;
   /** EMAIL_MARKETING_ENABLED — whether the schedule is registered at all. */
   cron_enabled: boolean;
