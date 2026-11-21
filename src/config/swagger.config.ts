@@ -138,11 +138,28 @@ export const swaggerSpec = {
                   customer: {
                     type: 'object',
                     properties: {
-                      email: { type: 'string', example: 'customer@example.com' },
+                      email: {
+                        type: 'string',
+                        example: 'customer@example.com',
+                        description: 'Empty while the attempt is still on its placeholder address.'
+                      },
                       first_name: { type: 'string', nullable: true, example: '太郎' },
                       last_name: { type: 'string', nullable: true, example: '山田' },
                       age: { type: 'string', nullable: true, example: '30' },
-                      gender: { type: 'string', nullable: true, example: null }
+                      gender: { type: 'string', nullable: true, example: null },
+                      email_required: {
+                        type: 'boolean',
+                        example: false,
+                        description:
+                          'The Personal Detail page must ask for an email: true after an Apple Pay / Google Pay ' +
+                          'payment, until a real address is in place.'
+                      },
+                      suggested_email: {
+                        type: 'string',
+                        nullable: true,
+                        example: 'taro@icloud.com',
+                        description: 'The address the wallet handed over, to pre-fill that field with.'
+                      }
                     }
                   },
                   report: {
@@ -181,9 +198,17 @@ export const swaggerSpec = {
       },
       QuizSubmitRequest: {
         type: 'object',
-        required: ['email', 'iq_score'],
+        required: ['iq_score'],
         properties: {
-          email: { type: 'string', format: 'email', example: 'taro@example.com' },
+          email: {
+            type: 'string',
+            format: 'email',
+            example: 'taro@example.com',
+            description:
+              'Optional. The current funnel submits without one: the attempt gets a placeholder address ' +
+              '(dummy_{id}@noumirai.com) until the real one arrives with the payment. Sent only by the ' +
+              'previous frontend, which is served by the previous behaviour and page order.'
+          },
           iq_score: {
             type: 'integer',
             minimum: 40,
@@ -231,9 +256,11 @@ export const swaggerSpec = {
                     type: 'string',
                     enum: ['CHECKOUT_PAGE', 'CROSS_SELL_PAGE', 'CUSTOMER_DETAILS_PAGE', 'THANK_YOU_PAGE'],
                     description:
-                      'Derived from succeeded payments and saved demographics, in this order: no first sale → CHECKOUT_PAGE; ' +
-                      'name saved → THANK_YOU_PAGE (this wins, so declining the upsell is not a dead end); ' +
-                      'no cross sale → CROSS_SELL_PAGE; otherwise CUSTOMER_DETAILS_PAGE.'
+                      'Derived from succeeded payments, saved demographics and a recorded upsell decline. ' +
+                      'Current funnel: no first sale → CHECKOUT_PAGE; no name → CUSTOMER_DETAILS_PAGE; ' +
+                      'upsell bought or declined → THANK_YOU_PAGE; otherwise CROSS_SELL_PAGE. ' +
+                      'Attempts made before that change keep the previous order: no first sale → CHECKOUT_PAGE; ' +
+                      'name saved → THANK_YOU_PAGE; upsell not settled → CROSS_SELL_PAGE; otherwise CUSTOMER_DETAILS_PAGE.'
                   },
                   quiz: {
                     type: 'object',
@@ -300,6 +327,24 @@ export const swaggerSpec = {
               'plain code (`K75QSQC`) or one personalised with the first two letters of the email plus an ' +
               'underscore (`pu_K75QSQC`). Revalidated here, so the PaymentIntent is created for the ' +
               'discounted amount — this is what actually gets charged.'
+          },
+          email: {
+            type: 'string',
+            format: 'email',
+            example: 'taro@example.com',
+            description:
+              'Card payments. The address typed beside the card form, applied before the intent is ' +
+              'created so the payment, Stripe Customer and subscription belong to the real person. ' +
+              'Merges into an existing customer who already owns the address.'
+          },
+          wallet_email: {
+            type: 'string',
+            format: 'email',
+            example: 'taro@icloud.com',
+            description:
+              'Apple Pay / Google Pay payments. The address the wallet handed over. Held back, not applied: ' +
+              'the Personal Detail page may supply another, and if it does not, a job applies this one ' +
+              'WALLET_EMAIL_DELAY_MINUTES (default 10) after the payment succeeds.'
           }
         }
       },
@@ -485,7 +530,17 @@ export const swaggerSpec = {
           quiz_id: { type: 'string', example: 'a1b2c3d4e5f6' },
           first_name: { type: 'string', example: '太郎' },
           last_name: { type: 'string', example: '山田' },
-          age: { type: 'string', example: '30', description: 'Stored as a string.' }
+          age: { type: 'string', example: '30', description: 'Stored as a string.' },
+          gender: { type: 'string', example: 'female' },
+          email: {
+            type: 'string',
+            format: 'email',
+            example: 'taro@example.com',
+            description:
+              'Asked only after an Apple Pay / Google Pay payment (when the report says email_required). ' +
+              'Applied immediately and wins over the address the wallet handed over; merges into an existing ' +
+              'customer who already owns it.'
+          }
         }
       }
     },
@@ -776,6 +831,61 @@ export const swaggerSpec = {
               'The first sale has not succeeded yet, or no saved payment method is available for this customer.',
             content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
           }
+        }
+      }
+    },
+
+    '/payment/cross-sale/decline': {
+      post: {
+        tags: ['Payment'],
+        summary: 'Record that the upsell was declined',
+        description:
+          "What the upsell's skip button tells the server. Recorded so the customer is not routed back " +
+          'to the upsell (from a new tab or the report email), and — in the current page order, where ' +
+          'the upsell is the last step — it finishes the report, so the report-ready email is sent. ' +
+          'Idempotent. Returns where the customer belongs next.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['quiz_id'],
+                properties: { quiz_id: { type: 'string', example: 'a1b2c3d4e5f6' } }
+              }
+            }
+          }
+        },
+        responses: {
+          200: {
+            description: 'Recorded.',
+            content: {
+              'application/json': {
+                schema: {
+                  allOf: [
+                    { $ref: '#/components/schemas/SuccessEnvelope' },
+                    {
+                      type: 'object',
+                      properties: {
+                        data: {
+                          type: 'object',
+                          properties: {
+                            redirect_url: {
+                              type: 'string',
+                              enum: ['CHECKOUT_PAGE', 'CROSS_SELL_PAGE', 'CUSTOMER_DETAILS_PAGE', 'THANK_YOU_PAGE']
+                            }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          400: { $ref: '#/components/responses/ValidationError' },
+          401: { $ref: '#/components/responses/Unauthorized' },
+          404: { $ref: '#/components/responses/NotFound' }
         }
       }
     },

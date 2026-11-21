@@ -6,7 +6,10 @@ import { validateRequest } from '../middlewares/validation.middleware.js';
 const router = Router();
 
 const submitQuizSchema = z.object({
-  email: z.string().email(),
+  // Optional: the current frontend submits without one, and the address
+  // arrives with the payment. A visitor still on the previous bundle sends it
+  // from the old email page, and is served by the old behaviour.
+  email: z.string().trim().email().max(255).optional(),
   iq_score: z.number().int().min(40).max(200),
   // The instrument's own subtests, by key: visual (Visual Reasoning), insight
   // (Visual Insight) and numerical (Numerical Reasoning). Left as a free-form

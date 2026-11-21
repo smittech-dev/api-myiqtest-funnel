@@ -1,4 +1,19 @@
 import dotenv from 'dotenv';
+
+/*
+ * `.env.local` first, then `.env`.
+ *
+ * dotenv never overwrites a variable that is already set, so whatever
+ * `.env.local` defines wins and `.env` fills in the rest. That lets a developer
+ * keep one `.env` holding the real credentials — the Stripe test keys, say —
+ * and put only the machine-specific differences in `.env.local`: the local
+ * database, `NODE_ENV=development`, localhost URLs, emails in dry-run.
+ *
+ * Absent on a server, where this is a no-op and `.env` is read exactly as
+ * before. Both files are gitignored. Variables set in the shell still win
+ * over both, as they always have.
+ */
+dotenv.config({ path: '.env.local' });
 dotenv.config();
 
 /**
@@ -213,7 +228,20 @@ export const config = {
     priceIdJa: process.env.STRIPE_SUB_PRICE_ID_JA || '',
     priceIdEn: process.env.STRIPE_SUB_PRICE_ID_EN || ''
   },
-  
+
+  /**
+   * Replacing the placeholder address after an Apple Pay / Google Pay payment.
+   *
+   * The wallet hands over an address with the payment, but it is held back for
+   * `delayMinutes` so the customer can give a different one on the Personal
+   * Detail page — which wins. If they do not, the job applies the wallet's.
+   * Checked every minute, so the replacement lands within a minute of its time.
+   */
+  walletEmail: {
+    delayMinutes: Math.max(1, parseInt(process.env.WALLET_EMAIL_DELAY_MINUTES || '10', 10) || 10),
+    cron: process.env.WALLET_EMAIL_CRON || '* * * * *'
+  },
+
   // Admin panel authentication. Sessions are deliberately long-lived (60 days)
   // so an operator is not re-prompted during normal use; revocation is by
   // flipping the admin user's status to anything other than 'active'.

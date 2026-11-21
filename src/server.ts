@@ -4,7 +4,7 @@ import { config, isLoopbackUrl } from './config/env.config.js';
 import { AppDataSource } from './config/database.config.js';
 import { logger } from './utils/logger.util.js';
 import { startCurrencyRateCron, stopCurrencyRateCron } from './jobs/currency-rate.job.js';
-import { startEmailMarketingCron, stopEmailMarketingCron } from './jobs/email-marketing.job.js';
+import { startWalletEmailCron, stopWalletEmailCron } from './jobs/wallet-email.job.js';
 
 /**
  * The settings that are only wrong once they are in someone's inbox.
@@ -57,9 +57,16 @@ async function bootstrap() {
       logger.warn('Server starting in standalone mode. Database queries will require active PostgreSQL connection.');
     }
 
-    // 2. Schedule background jobs (each a no-op when disabled via env)
+    // 2. Schedule background jobs
+    //
+    // The abandoned-checkout reminder sequence is no longer scheduled. The
+    // funnel stopped collecting an email before checkout, so there is nobody
+    // left for it to remind: a visitor who leaves without paying has only a
+    // placeholder address. Its code, tables and admin history are kept, and
+    // `emailMarketingService.runOnce` refuses to send if it is triggered by
+    // hand — see SEQUENCE_RETIRED there.
     startCurrencyRateCron();
-    startEmailMarketingCron();
+    startWalletEmailCron();
 
     // 3. Create and start Express application
     const app = createApp();
@@ -75,7 +82,7 @@ async function bootstrap() {
     const shutdown = async (signal: string) => {
       logger.info(`Received ${signal}. Shutting down gracefully...`);
       await stopCurrencyRateCron();
-      await stopEmailMarketingCron();
+      await stopWalletEmailCron();
       server.close(async () => {
         if (AppDataSource.isInitialized) {
           await AppDataSource.destroy();

@@ -14,6 +14,7 @@ import { reportUrlFor } from '../utils/report-url.util.js';
 import { logger } from '../utils/logger.util.js';
 import { PasswordUtil } from '../utils/password.util.js';
 import { inBoostLocale } from '../utils/boost-locale.util.js';
+import { isPlaceholderEmail } from '../utils/placeholder-email.util.js';
 
 /**
  * The transactional emails a paying customer receives.
@@ -78,6 +79,19 @@ export class EmailTransactionalService {
         return { skip: 'quiz result has no customer account' };
       }
 
+      /* Not yet: the customer is still on their placeholder address. A wallet
+         payment settles before we know who paid — the real address arrives
+         from the Personal Detail page or, failing that, the replacement job ten
+         minutes later — and this email carries the password. Sent now it would
+         go to dummy_{id}@noumirai.com and the credentials would be lost.
+
+         Skipped before the claim, so no row is spent: `customerEmailService`
+         calls this again the moment a real address lands. Checked before
+         `ensurePassword` too, so no password is issued that nobody will see. */
+      if (isPlaceholderEmail(customer.email)) {
+        return { skip: 'customer has no real email address yet' };
+      }
+
       // Issue the password *before* the claim is spent, so a provider failure
       // leaves the account with a working password and a retryable email rather
       // than an account nobody can sign in to.
@@ -138,6 +152,11 @@ export class EmailTransactionalService {
         // There is no report without the first sale. Reachable if the funnel
         // ever saves details before payment settles.
         return { skip: 'first sale is not paid' };
+      }
+
+      // Same reason as the welcome email: nothing goes to a placeholder.
+      if (isPlaceholderEmail(quizResult.email)) {
+        return { skip: 'customer has no real email address yet' };
       }
 
       return {

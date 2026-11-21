@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import type { Repository } from 'typeorm';
 import { AppDataSource } from '../config/database.config.js';
 import { CustomerQuizResult } from '../entities/CustomerQuizResult.entity.js';
 import { Customer } from '../entities/Customer.entity.js';
@@ -6,22 +7,40 @@ import { AppError } from '../utils/app-error.util.js';
 import { EncryptionUtil } from '../utils/encryption.util.js';
 import { QuizSubmitPayload } from '../types/quiz.types.js';
 import { resolveFunnelRedirect, FunnelRedirect } from '../utils/funnel-redirect.util.js';
-import { emailVerificationService } from './email-verification.service.js';
-import { config } from '../config/env.config.js';
-import { logger } from '../utils/logger.util.js';
+import {
+  isPlaceholderEmail,
+  normaliseEmail,
+  placeholderEmailFor
+} from '../utils/placeholder-email.util.js';
 
 export class QuizService {
   private quizResultRepository = AppDataSource.getRepository(CustomerQuizResult);
-  private customerRepository = AppDataSource.getRepository(Customer);
 
   /**
-   * Submit quiz with pre-calculated iq_score and 4 category scores from frontend
+   * Store a finished quiz and open the funnel session for it.
+   *
+   * The funnel no longer asks for an email before checkout, so the current
+   * frontend submits without one. The attempt then gets a customer of its own
+   * on a placeholder address, `dummy_{quizId}@noumirai.com`, which the real
+   * address replaces once it arrives with the payment — see
+   * `customerEmailService`.
+   *
+   * An email is still accepted when it is sent. That is the previous frontend:
+   * a visitor whose browser still holds the old bundle went through the email
+   * page and walks the old page order, and is served by the old behaviour —
+   * attached to whoever owns that address, and routed by the old rules
+   * (`funnel_version` stays null).
+   *
+   * No address is verified with Reoon any more. Its only consumer was the
+   * abandoned-checkout sequence, which has been retired along with the page
+   * that fed it, and an address typed at the moment of paying has just been
+   * accepted by Stripe for that payment.
    */
   async submitQuiz(payload: QuizSubmitPayload, ipAddress?: string): Promise<{
     quiz_id: string;
   }> {
     const {
-      email,
+      email: rawEmail,
       iq_score,
       category_scores,
       duration_seconds,
@@ -29,86 +48,93 @@ export class QuizService {
       landing_url_details
     } = payload;
 
-    // 1–2. Customer and quiz result are written in one transaction. Before, the
-    // customer was committed on its own, so any failure saving the quiz (or in
-    // between) left a customer with no quiz behind it.
-    const { customer, savedResult } = await AppDataSource.transaction(async (manager) => {
+    const email = rawEmail ? normaliseEmail(rawEmail) : null;
+    const lang = language.toLowerCase() === 'en' ? 'en' : 'ja';
+
+    // Customer and quiz result are written in one transaction, so a failure in
+    // either never leaves the other behind on its own.
+    const savedResult = await AppDataSource.transaction(async (manager) => {
       const customerRepo = manager.getRepository(Customer);
       const quizRepo = manager.getRepository(CustomerQuizResult);
 
-      // Find or create Customer with inactive status and temporary password hash.
-      // `orIgnore` covers two submits for a new email racing each other: the
-      // loser skips the insert and reads back the winner's row instead of
-      // failing on the unique email constraint.
-      let customer = await customerRepo.findOne({ where: { email } });
-      if (!customer) {
-        const tempPassword = crypto.randomBytes(16).toString('hex');
-        const passwordHash = crypto.createHash('sha256').update(tempPassword).digest('hex');
-
-        await customerRepo
-          .createQueryBuilder()
-          .insert()
-          .values({
-            email,
-            password_hash: passwordHash,
-            status: 'inactive' // Customer cannot log in until activated
-          })
-          .orIgnore()
-          .execute();
-        customer = await customerRepo.findOneOrFail({ where: { email } });
-      }
-
-      const quizResult = quizRepo.create({
-        customer_id: customer.id,
-        email,
+      const attempt = {
         iq_score: Math.round(iq_score),
         category_scores: category_scores || null,
         duration_seconds: duration_seconds || null,
-        language: language.toLowerCase() === 'en' ? 'en' : 'ja',
+        language: lang,
         // Clamped to the column: an over-long value must never cost the quiz.
         ip_address: ipAddress ? ipAddress.slice(0, 100) : null,
-        country_code: language.toLowerCase() === 'ja' ? 'JP' : 'US',
+        country_code: lang === 'ja' ? 'JP' : 'US',
         landing_url_details: landing_url_details || null,
         report_urls: null
-      });
+      };
 
-      return { customer, savedResult: await quizRepo.save(quizResult) };
+      if (email) {
+        const customer = await this.findOrCreateCustomer(customerRepo, email);
+        return quizRepo.save(quizRepo.create({ ...attempt, customer_id: customer.id, email: customer.email }));
+      }
+
+      // The placeholder is built from the attempt's own id, which exists only
+      // once the row is written — and the row needs an address to be written.
+      // So it is written first with a throwaway one, then both rows take the
+      // real placeholder before the transaction commits. Nobody outside the
+      // transaction ever sees the throwaway.
+      const transient = `pending_${crypto.randomUUID()}@noumirai.invalid`;
+      const quiz = await quizRepo.save(
+        quizRepo.create({ ...attempt, customer_id: null, email: transient, funnel_version: 2 })
+      );
+
+      const placeholder = placeholderEmailFor(quiz.id);
+      const customer = await customerRepo.save(
+        customerRepo.create({
+          email: placeholder,
+          password_hash: crypto.createHash('sha256').update(crypto.randomBytes(16)).digest('hex'),
+          // Cannot sign in until a payment activates the account, and even then
+          // not until a real address and a password are issued with it.
+          status: 'inactive'
+        })
+      );
+
+      quiz.customer_id = customer.id;
+      quiz.email = placeholder;
+      return quizRepo.save(quiz);
     });
 
-    // 3. Verify the address with Reoon the first time we see it. Best-effort: a
-    // provider outage must not stop someone submitting, and an already-verified
-    // customer is not re-checked (each call costs a credit). Runs after the
-    // commit so a slow provider never holds the transaction open.
-    await this.verifyCustomerEmail(customer);
-
-    // 4. Encrypt the database quiz result ID
-    const encryptedQuizId = EncryptionUtil.encryptId(savedResult.id);
-
     return {
-      quiz_id: encryptedQuizId
+      quiz_id: EncryptionUtil.encryptId(savedResult.id)
     };
   }
 
   /**
-   * Run email verification and persist the outcome. Swallows every failure.
+   * The customer who owns this address, matched case-insensitively, or a new
+   * one. `orIgnore` covers two submits for a new address racing each other:
+   * the loser skips the insert and reads back the winner's row.
    */
-  private async verifyCustomerEmail(customer: Customer): Promise<void> {
-    if (!config.emailVerification.enabled || customer.email_verified) {
-      return;
-    }
+  private async findOrCreateCustomer(
+    customerRepo: Repository<Customer>,
+    email: string
+  ): Promise<Customer> {
+    const existing = await customerRepo
+      .createQueryBuilder('c')
+      .where('LOWER(c.email) = :email', { email })
+      .getOne();
+    if (existing) return existing;
 
-    try {
-      const result = await emailVerificationService.verify(customer.email);
+    await customerRepo
+      .createQueryBuilder()
+      .insert()
+      .values({
+        email,
+        password_hash: crypto.createHash('sha256').update(crypto.randomBytes(16)).digest('hex'),
+        status: 'inactive'
+      })
+      .orIgnore()
+      .execute();
 
-      if (result.verified !== customer.email_verified) {
-        customer.email_verified = result.verified;
-        await this.customerRepository.save(customer);
-      }
-    } catch (err: any) {
-      // The service already guards itself; this is a last resort so a storage
-      // problem here can never fail the quiz submission.
-      logger.error(`Email verification step failed for ${customer.email}: ${err.message}`);
-    }
+    return customerRepo
+      .createQueryBuilder('c')
+      .where('LOWER(c.email) = :email', { email })
+      .getOneOrFail();
   }
 
   /**
@@ -163,7 +189,9 @@ export class QuizService {
         duration_seconds: result.duration_seconds
       },
       customer: {
-        email: result.email,
+        // Never the placeholder: it is ours, not the customer's, and a page
+        // that printed it would be showing them an address that is not theirs.
+        email: isPlaceholderEmail(result.email) ? '' : result.email,
         first_name: result.first_name,
         last_name: result.last_name,
         age: result.age
@@ -199,6 +227,19 @@ export class QuizService {
       last_name: string | null;
       age: string | null;
       gender: string | null;
+      /**
+       * The Personal Detail page must ask for an email address. True while the
+       * attempt is still on its placeholder — after a wallet payment, which
+       * settles before we know who paid. A card payment brings its address
+       * with it, so this is false by the time a card payer gets here.
+       */
+      email_required: boolean;
+      /**
+       * What to pre-fill that field with: the address the wallet handed over,
+       * held back until the customer either confirms it, types another, or
+       * leaves it to the replacement job. Null when there is none.
+       */
+      suggested_email: string | null;
     };
     report: {
       first_sale_paid: boolean;
@@ -241,11 +282,13 @@ export class QuizService {
         completed_at: result.created_at
       },
       customer: {
-        email: result.email,
+        email: isPlaceholderEmail(result.email) ? '' : result.email,
         first_name: result.first_name,
         last_name: result.last_name,
         age: result.age,
-        gender: result.gender
+        gender: result.gender,
+        email_required: isPlaceholderEmail(result.email),
+        suggested_email: isPlaceholderEmail(result.email) ? result.pending_email : null
       },
       report: {
         first_sale_paid: hasPaid('first_sale'),

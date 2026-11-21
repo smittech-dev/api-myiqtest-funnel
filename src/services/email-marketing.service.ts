@@ -67,6 +67,25 @@ export interface EmailMarketingRunResult {
   duration_ms: number;
 }
 
+/**
+ * The sequence is retired.
+ *
+ * It reminded people who gave their email on the page before checkout and then
+ * did not pay. That page is gone: the address now arrives with the payment
+ * itself, so a visitor who leaves without paying has only a placeholder, and
+ * there is nobody for the sequence to write to. Left running, its only effect
+ * would be to work through the last leads captured by the old page — which the
+ * business has decided not to do.
+ *
+ * Retired here rather than by an env var or the admin toggle, because those are
+ * meant to be flipped back on, and turning this back on without a page that
+ * collects addresses before checkout would do nothing useful. The cron is no
+ * longer registered (server.ts), and this stops a manual "Run now" too. The
+ * tables, the templates and the admin's history are untouched. To revive it,
+ * restore an email step before checkout first, then flip this.
+ */
+const SEQUENCE_RETIRED = true;
+
 export class EmailMarketingService {
   private logRepository = AppDataSource.getRepository(EmailMarketingLog);
 
@@ -83,8 +102,6 @@ export class EmailMarketingService {
    */
   async runOnce(): Promise<EmailMarketingRunResult> {
     const startedAt = Date.now();
-    const settings = await emailMarketingSettingsService.getConfig();
-    const steps = enabledStepsInOrder(settings);
 
     const empty: EmailMarketingRunResult = {
       candidates: 0,
@@ -94,6 +111,14 @@ export class EmailMarketingService {
       nothing_due: 0,
       duration_ms: 0
     };
+
+    if (SEQUENCE_RETIRED) {
+      logger.info('Email marketing run skipped — the abandoned-checkout sequence is retired.');
+      return { ...empty, duration_ms: Date.now() - startedAt };
+    }
+
+    const settings = await emailMarketingSettingsService.getConfig();
+    const steps = enabledStepsInOrder(settings);
 
     if (!settings.enabled) {
       logger.info('Email marketing run skipped — the sequence is disabled in the admin config.');

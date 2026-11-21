@@ -20,7 +20,15 @@ const firstSaleIntentSchema = paymentIntentSchema.extend({
     .refine(
       (v) => v === undefined || v === '' || resolveDiscountCode(v) !== null,
       `price_dis must be a valid discount code (configured: ${DISCOUNT_CODES.join(', ')}), optionally prefixed with two email letters and an underscore`
-    )
+    ),
+  // A card payment: the address typed beside the card form. Applied before the
+  // intent is created, so the payment, the Stripe Customer and the
+  // subscription all belong to the real person from the start.
+  email: z.string().trim().email().max(255).optional(),
+  // An Apple Pay / Google Pay payment: the address the wallet handed over.
+  // Held back, not applied — the Personal Detail page may supply a better one,
+  // and the replacement job applies this only if it does not.
+  wallet_email: z.string().trim().email().max(255).optional()
 });
 
 const firstSaleConfirmSchema = z.object({
@@ -50,6 +58,15 @@ router.post(
   '/cross-sale/confirm',
   validateRequest({ body: paymentIntentSchema }),
   PaymentController.confirmCrossSalePayment
+);
+
+// POST /payment/cross-sale/decline
+// The upsell was turned down. Recorded so the customer is not sent back to it,
+// and because it settles the report — the report-ready email goes out now.
+router.post(
+  '/cross-sale/decline',
+  validateRequest({ body: paymentIntentSchema.pick({ quiz_id: true }) }),
+  PaymentController.declineCrossSale
 );
 
 // POST /payment/webhook

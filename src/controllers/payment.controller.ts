@@ -41,6 +41,18 @@ export class PaymentController {
   }
 
   /**
+   * POST /payment/cross-sale/decline
+   */
+  static async declineCrossSale(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const data = await paymentService.declineCrossSale(req.body);
+      ResponseUtil.success(res, data, 'Cross-sale declined');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/v1/payment/stripe/webhook
    */
   static async handleWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {

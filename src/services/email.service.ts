@@ -9,6 +9,7 @@ import {
 } from '../emails/registry.js';
 import { externalApiLogService, EXTERNAL_API_SERVICE } from './external-api-log.service.js';
 import { isUnsubscribed } from './email-unsubscribe.service.js';
+import { isPlaceholderEmail } from '../utils/placeholder-email.util.js';
 import { logger } from '../utils/logger.util.js';
 
 /**
@@ -128,6 +129,21 @@ export class EmailService {
     const template = getTemplate(templateId);
     if (!template) {
       return { status: 'failed', error: `Unknown email template "${templateId}"`, statusCode: null };
+    }
+
+    /**
+     * Never to a placeholder.
+     *
+     * Every customer starts on `dummy_{quizId}@noumirai.com` until their real
+     * address arrives with the payment. The senders that matter check for this
+     * themselves and wait — the welcome email in particular — but this is the
+     * one point every email passes through, so it is the one check that cannot
+     * be forgotten by the next sender someone writes. Skipped rather than
+     * failed: nothing went wrong, there is simply nobody to write to yet.
+     */
+    if (isPlaceholderEmail(to)) {
+      logger.info(`Email "${templateId}" not sent: ${to} is a placeholder, not a real address.`);
+      return { status: 'skipped', reason: 'Recipient is a placeholder address, not a real one.' };
     }
 
     /**

@@ -13,7 +13,8 @@ export interface CategoryScores {
 }
 
 export interface QuizSubmitPayload {
-  email: string;
+  /** Absent from the current frontend; sent by the previous one. */
+  email?: string;
   iq_score: number;
   category_scores?: CategoryScores;
   duration_seconds?: number;

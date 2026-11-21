@@ -14,7 +14,10 @@ const updateCustomerSchema = z.object({
   // current browser sends it — but a customer part-way through the funnel on a
   // bundle cached from before it did must not be rejected at the one page they
   // are already stuck on. Length matches the column.
-  gender: z.string().min(1).max(50).optional()
+  gender: z.string().min(1).max(50).optional(),
+  // Asked only of wallet payers, whose payment settled before we knew who
+  // they were. Wins over the address the wallet handed over.
+  email: z.string().trim().email().max(255).optional()
 });
 
 // PUT /customer/update

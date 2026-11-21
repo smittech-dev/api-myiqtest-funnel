@@ -12,8 +12,14 @@ import { AppError } from '../utils/app-error.util.js';
 import { EncryptionUtil } from '../utils/encryption.util.js';
 import { getPricingByLanguage, applyDiscount, resolveDiscountCode } from '../constants/pricing.constants.js';
 import { emailTransactionalService } from './email-transactional.service.js';
+import { customerEmailService } from './customer-email.service.js';
+import { isPlaceholderEmail } from '../utils/placeholder-email.util.js';
 import { logger } from '../utils/logger.util.js';
-import { resolveFunnelRedirect, FunnelRedirect } from '../utils/funnel-redirect.util.js';
+import {
+  EMAIL_AT_PAYMENT_FUNNEL,
+  resolveFunnelRedirect,
+  FunnelRedirect
+} from '../utils/funnel-redirect.util.js';
 import { readSubscriptionPeriod } from '../utils/stripe-period.util.js';
 import { applyStripeSubscription } from '../utils/stripe-subscription.util.js';
 
@@ -98,6 +104,10 @@ export class PaymentService {
     quiz_id: string;
     language?: string;
     price_dis?: string;
+    /** Card payments: the address typed beside the card form. */
+    email?: string;
+    /** Wallet payments: the address the wallet handed over, held back. */
+    wallet_email?: string;
   }): Promise<{
     client_secret: string;
     payment_intent_id: string;
@@ -107,8 +117,8 @@ export class PaymentService {
     discount_code: string | null;
     currency: string;
   }> {
-    const { quiz_id, language, price_dis } = params;
-    const quizResult = await this.findQuizResult(quiz_id);
+    const { quiz_id, language, price_dis, email, wallet_email } = params;
+    let quizResult = await this.findQuizResult(quiz_id);
 
     // Determine language pricing: passed in request or from saved quiz result
     const selectedLang = language || quizResult.language || 'ja';
@@ -136,18 +146,43 @@ export class PaymentService {
       throw new AppError('The first sale has already been paid for this quiz', 409);
     }
 
-    // This endpoint is the moment the customer initiates payment, so it owns the
-    // transaction row. Re-initiating (a retry, a refresh) must reuse the pending
-    // attempt rather than stacking another row and another PaymentIntent.
-    const reused = await this.reusablePendingIntent(quizResult, product, discount?.code || null);
-    if (reused) {
-      return reused;
+    // Who is paying. A card payment brings the address with it, and it is
+    // applied *before* anything else here, so the Stripe Customer resolved
+    // below, the payment, the subscription and the welcome email all belong
+    // to the real person — and a returning customer is merged into their
+    // existing account first, where the one-plan-per-customer check can see
+    // the plan they already hold.
+    if (email) {
+      await customerEmailService.assign(quizResult.id, email, 'card_checkout');
+      quizResult = await this.findQuizResult(quiz_id);
+    } else if (wallet_email && isPlaceholderEmail(quizResult.email)) {
+      // A wallet payment: hold the wallet's address back. The Personal Detail
+      // page may bring a better one, and the replacement job applies this one
+      // ten minutes after the payment only if it does not. The clock starts
+      // when the payment succeeds, not here — see `settleTransactionFromIntent`.
+      const held = wallet_email.trim();
+      await this.quizResultRepository.update(quizResult.id, { pending_email: held });
+      quizResult.pending_email = held;
     }
 
     // The cross-sale charges this same card off-session later, so the first sale
     // must attach a Stripe Customer and save the payment method for reuse.
-    // Created here — at initiation — not when the customer submitted their email.
+    // Resolved before the reuse check below: an intent left over from an
+    // attempt made before the address changed belongs to a different Customer.
     const stripeCustomerId = await this.getOrCreateStripeCustomer(quizResult);
+
+    // This endpoint is the moment the customer initiates payment, so it owns the
+    // transaction row. Re-initiating (a retry, a refresh) must reuse the pending
+    // attempt rather than stacking another row and another PaymentIntent.
+    const reused = await this.reusablePendingIntent(
+      quizResult,
+      product,
+      discount?.code || null,
+      stripeCustomerId
+    );
+    if (reused) {
+      return reused;
+    }
 
     let paymentIntent: Stripe.PaymentIntent;
     try {
@@ -232,7 +267,8 @@ export class PaymentService {
       original_price: number;
       discount_percentage: number;
     },
-    discountCode: string | null
+    discountCode: string | null,
+    stripeCustomerId: string
   ): Promise<{
     client_secret: string;
     payment_intent_id: string;
@@ -274,7 +310,16 @@ export class PaymentService {
       intent.amount === product.stripe_amount &&
       intent.currency === product.currency.toLowerCase();
 
-    if (!stillOpen || !matchesPrice || !intent.client_secret) {
+    // An intent opened for a different Stripe Customer is not this person's
+    // to reuse. It happens when the address changed between attempts — a wallet
+    // sheet cancelled and a card used instead, or an address corrected — and
+    // reusing it would save the card on the wrong Customer, where the cross-sale
+    // could not charge it. A fresh intent is opened instead.
+    const intentCustomer =
+      typeof intent.customer === 'string' ? intent.customer : intent.customer?.id ?? null;
+    const sameCustomer = intentCustomer === stripeCustomerId;
+
+    if (!stillOpen || !matchesPrice || !sameCustomer || !intent.client_secret) {
       return null;
     }
 
@@ -853,6 +898,12 @@ export class PaymentService {
     await this.customerRepository.save(customer);
 
     if (!isFirstSale) {
+      // A paid upsell settles the report in the current page order, where the
+      // upsell is the last step: send the report-ready email now. (In the
+      // previous order the details page came last and sends it itself.)
+      if (transaction.transaction_type === 'cross_sale') {
+        await this.sendReportReadyIfFunnelEnded(transaction.customer_quiz_result_id);
+      }
       return null;
     }
 
@@ -874,6 +925,16 @@ export class PaymentService {
       ? await this.startSubscription(quizResult, paymentIntent)
       : subscriptionSkipped('transaction has no quiz result');
 
+    if (isPlaceholderEmail(customer.email)) {
+      // A wallet payment: it settled before we know who paid, so the welcome
+      // email — which carries the password — waits for a real address. It is
+      // sent from `customerEmailService` the moment one arrives: typed on the
+      // Personal Detail page, or the wallet's own applied by the replacement
+      // job. This starts that job's clock.
+      await this.startWalletEmailClock(transaction.customer_quiz_result_id);
+      return subscription;
+    }
+
     // The welcome email, with the customer's NOUMIRAI Cognitive Training Program credentials.
     //
     // Deliberately not awaited. The customer's money has already moved, and a
@@ -887,6 +948,95 @@ export class PaymentService {
       .catch((err) => logger.error(`Welcome email dispatch failed: ${err?.message ?? err}`));
 
     return subscription;
+  }
+
+  /**
+   * Schedule the wallet's address to replace the placeholder, if nothing better
+   * arrives first.
+   *
+   * Set only once — the confirm endpoint and the webhook both settle a payment,
+   * and the second must not push the deadline back. Nothing to schedule when
+   * the wallet handed over no address; the customer is then asked for one on
+   * the Personal Detail page, and keeps the placeholder if they never give it.
+   */
+  private async startWalletEmailClock(quizResultId: string): Promise<void> {
+    const delayMinutes = config.walletEmail.delayMinutes;
+
+    const result = await this.quizResultRepository
+      .createQueryBuilder()
+      .update(CustomerQuizResult)
+      .set({ pending_email_due_at: () => `NOW() + INTERVAL '${delayMinutes} minutes'` })
+      .where('id = :id', { id: quizResultId })
+      .andWhere('pending_email IS NOT NULL')
+      .andWhere('pending_email_due_at IS NULL')
+      .execute();
+
+    if (result.affected) {
+      logger.info(
+        `Quiz ${quizResultId}: wallet email will replace the placeholder in ${delayMinutes} minutes ` +
+          'unless one is entered on the Personal Detail page.'
+      );
+      return;
+    }
+
+    const quiz = await this.quizResultRepository.findOne({ where: { id: quizResultId } });
+    if (quiz && !quiz.pending_email) {
+      logger.warn(
+        `Quiz ${quizResultId}: paid by wallet with no email from the wallet — the customer has ` +
+          'to give one on the Personal Detail page, or the welcome email cannot be sent.'
+      );
+    }
+  }
+
+  /**
+   * The report-ready email, for an attempt whose funnel has just finished.
+   *
+   * In the current page order the upsell is the last step, so buying or
+   * declining it is what finishes the report. Attempts on the previous order
+   * finish on the details page, which sends this itself, and must not get it
+   * early — before the name that goes on the certificate is known.
+   */
+  private async sendReportReadyIfFunnelEnded(quizResultId: string): Promise<void> {
+    const quiz = await this.quizResultRepository.findOne({
+      where: { id: quizResultId },
+      select: { id: true, funnel_version: true }
+    });
+
+    if (!quiz || (quiz.funnel_version ?? 0) < EMAIL_AT_PAYMENT_FUNNEL) {
+      return;
+    }
+
+    void emailTransactionalService
+      .sendReportReady(quizResultId)
+      .catch((err) => logger.error(`Report-ready email dispatch failed: ${err?.message ?? err}`));
+  }
+
+  /**
+   * The customer turned the upsell down.
+   *
+   * Recorded so the funnel stops offering it — the page order now puts the
+   * upsell last, and without a record a decliner would be sent back to it from
+   * a new tab or from the report email's link. It also finishes the report,
+   * so the report-ready email goes out. The upsell page itself is unchanged;
+   * this is what its skip button now tells the server.
+   *
+   * Idempotent. Harmless after a purchase: a bought upsell already settles the
+   * route, and the report email is deduplicated.
+   */
+  async declineCrossSale(params: { quiz_id: string }): Promise<{ redirect_url: FunnelRedirect }> {
+    const quizResult = await this.findQuizResult(params.quiz_id);
+
+    await this.quizResultRepository
+      .createQueryBuilder()
+      .update(CustomerQuizResult)
+      .set({ cross_sell_declined_at: () => 'NOW()' })
+      .where('id = :id', { id: quizResult.id })
+      .andWhere('cross_sell_declined_at IS NULL')
+      .execute();
+
+    await this.sendReportReadyIfFunnelEnded(quizResult.id);
+
+    return { redirect_url: await this.currentRedirect(quizResult.id) };
   }
 
   /**
@@ -1019,6 +1169,12 @@ export class PaymentService {
     }
 
     await this.recordCrossSaleTransaction(quizResult, product, paymentIntent);
+
+    // Paid on the spot (no 3-D Secure): the report is finished. The webhook
+    // reaches the same call through settlement; the email is deduplicated.
+    if (paymentIntent.status === 'succeeded') {
+      await this.sendReportReadyIfFunnelEnded(quizResult.id);
+    }
 
     return {
       status: paymentIntent.status,
